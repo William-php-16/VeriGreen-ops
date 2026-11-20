@@ -1,0 +1,121 @@
+# VeriGreen-ops Regulatory Rulebook (User-Editable)
+# Aligns with EU Omnibus I (Directive (EU) 2026/470), Revised ESRS 2026
+# (Delegated Regulation (EU) 2026/1563), and Voluntary SME Standard VS
+# (Delegated Regulation (EU) 2026/1560).
+#
+# To customize for an SME supplier only, set active_frameworks to ["VS"].
+# Changes take effect when running: python src/db.py init
+
+version: "2026.1"
+active_frameworks:
+  - ESRS_2026
+  - VS
+
+requirements:
+  - req_id: "ESRS-E1-1"
+    framework: "ESRS_2026"
+    standard: "ESRS E1"
+    topic: "Climate Change Transition Plan & Scope 1/2 Policy"
+    requirement_text: >
+      Disclose the climate change mitigation transition plan and decarbonization
+      policies covering Scope 1 and Scope 2 greenhouse gas emissions, including
+      board-level governance, energy efficiency levers, renewable electricity
+      procurement, and alignment with the 1.5C Paris Agreement pathway.
+    is_quantitative: false
+    mandatory: true
+
+  - req_id: "ESRS-E1-4"
+    framework: "ESRS_2026"
+    standard: "ESRS E1"
+    topic: "GHG Emission Reduction Targets & Base Year"
+    requirement_text: >
+      Disclose measurable, time-bound GHG emission reduction targets across
+      Scope 1, Scope 2, and material Scope 3 categories, specifying the
+      percentage reduction target, target year, base year, and baseline
+      emissions value in tCO2e.
+    is_quantitative: true
+    mandatory: true
+
+  - req_id: "ESRS-E1-6"
+    framework: "ESRS_2026"
+    standard: "ESRS E1"
+    topic: "Gross Scope 1, Scope 2 & Scope 3 GHG Emissions"
+    requirement_text: >
+      Disclose gross Scope 1, Scope 2 (location-based and market-based), and
+      Scope 3 GHG emissions in metric tonnes of CO2 equivalent (tCO2e),
+      calculation methodology, consolidation boundary, and year-over-year
+      change reconciled against underlying facility utility and fuel logs.
+    is_quantitative: true
+    mandatory: true
+
+  - req_id: "ESRS-E4-1"
+    framework: "ESRS_2026"
+    standard: "ESRS E4"
+    topic: "Biodiversity & Ecosystems Impact Assessment"
+    requirement_text: >
+      Disclose how corporate operations and upstream sourcing impact
+      biodiversity and ecosystems, including site proximity to biodiversity-
+      sensitive areas, deforestation-free sourcing commitments, and nature-
+      positive transition actions.
+    is_quantitative: false
+    mandatory: false
+
+  - req_id: "ESRS-E5-5"
+    framework: "ESRS_2026"
+    standard: "ESRS E5"
+    topic: "Resource Outflows, Packaging & Substantiated Product Claims"
+    requirement_text: >
+      Disclose total packaging and product resource outflows, percentage of
+      recycled content and recyclable packaging by weight, and ensure any
+      environmental or carbon-neutrality product claims are substantiated by
+      gross life-cycle emissions, reduction hierarchy, and verified registries.
+    is_quantitative: true
+    mandatory: true
+
+  - req_id: "ESRS-S2-1"
+    framework: "ESRS_2026"
+    standard: "ESRS S2"
+    topic: "Workers in the Value Chain — Human Rights & Working Conditions"
+    requirement_text: >
+      Disclose policies and due diligence processes addressing workers in the
+      value chain, covering supplier codes of conduct, prohibition of forced
+      and child labor, safe working conditions, fair wages, and accessible
+      worker grievance mechanisms.
+    is_quantitative: false
+    mandatory: true
+
+  - req_id: "ESRS-G1-1"
+    framework: "ESRS_2026"
+    standard: "ESRS G1"
+    topic: "Business Conduct, Anti-Corruption & Whistleblowing"
+    requirement_text: >
+      Disclose corporate culture and business conduct policies, including
+      anti-corruption and anti-bribery controls, supplier ethics training,
+      confidential whistleblower protection channels, and governance of
+      confirmed compliance incidents.
+    is_quantitative: false
+    mandatory: true
+
+  - req_id: "VS-B3-1"
+    framework: "VS"
+    standard: "VS-B3"
+    topic: "SME Basic — Energy Consumption & Scope 1 and 2 GHG Emissions"
+    requirement_text: >
+      Under the Voluntary Standard for SMEs (VS-B3), disclose total annual
+      energy consumption in MWh (split by fossil fuel and renewable electricity)
+      and gross Scope 1 and Scope 2 GHG emissions in tCO2e derived directly
+      from utility bills and fuel records.
+    is_quantitative: true
+    mandatory: true
+
+  - req_id: "VS-B3-2"
+    framework: "VS"
+    standard: "VS-B3"
+    topic: "SME Basic — GHG Intensity & Reduction Actions"
+    requirement_text: >
+      Under the Voluntary Standard for SMEs (VS-B3), disclose GHG emission
+      intensity (tCO2e per million EUR turnover or tonne of output) and
+      implemented year-over-year energy and emissions reduction initiatives
+      reconciled with operational logs.
+    is_quantitative: true
+    mandatory: false
