@@ -1,17 +1,9 @@
-reporting_year,facility_id,facility_name,emission_scope,activity_source,energy_consumption,energy_unit,emissions_tco2e,methodology
-2024,NL-UTR-01,Utrecht Processing Plant,Scope 1,Natural Gas Boilers,12800,MWh,2600.0,Market-based
-2024,NL-UTR-01,Utrecht Processing Plant,Scope 2,Purchased Grid Electricity,5200,MWh,1400.0,Market-based
-2024,NL-EIN-02,Eindhoven Packaging Hub,Scope 1,Process Heat & LPG,6900,MWh,1400.0,Market-based
-2024,NL-EIN-02,Eindhoven Packaging Hub,Scope 2,Purchased Grid Electricity,4100,MWh,1100.0,Market-based
-2024,BE-ANT-03,Antwerp Cold Logistics Center,Scope 1,Backup Diesel & Refrigerants,4500,MWh,1100.0,Market-based
-2024,BE-ANT-03,Antwerp Cold Logistics Center,Scope 2,Purchased Grid Electricity,3600,MWh,900.0,Market-based
-2024,DE-DOR-04,Dortmund Distribution Depot,Scope 1,Regional Delivery Fleet,3800,MWh,900.0,Market-based
-2024,DE-DOR-04,Dortmund Distribution Depot,Scope 2,Purchased Grid Electricity,2400,MWh,600.0,Market-based
-2025,NL-UTR-01,Utrecht Processing Plant,Scope 1,Natural Gas Boilers,12300,MWh,2500.0,Market-based
-2025,NL-UTR-01,Utrecht Processing Plant,Scope 2,Purchased Grid Electricity,5100,MWh,1200.0,Market-based
-2025,NL-EIN-02,Eindhoven Packaging Hub,Scope 1,Process Heat & LPG,6650,MWh,1350.0,Market-based
-2025,NL-EIN-02,Eindhoven Packaging Hub,Scope 2,Purchased Grid Electricity,4000,MWh,950.0,Market-based
-2025,BE-ANT-03,Antwerp Cold Logistics Center,Scope 1,Backup Diesel & Refrigerants,4100,MWh,1000.0,Market-based
-2025,BE-ANT-03,Antwerp Cold Logistics Center,Scope 2,Purchased Grid Electricity,3500,MWh,800.0,Market-based
-2025,DE-DOR-04,Dortmund Distribution Depot,Scope 1,Regional Delivery Fleet,3600,MWh,850.0,Market-based
-2025,DE-DOR-04,Dortmund Distribution Depot,Scope 2,Purchased Grid Electricity,2350,MWh,550.0,Market-based
+reporting_year,facility,scope,category,activity_mwh,emissions_tco2e,verification_status
+2024,Rotterdam Logistics Hub,Scope 1,Stationary & Fleet Fuel,4200,1040.0,Limited Assurance
+2024,Utrecht Packaging Plant,Scope 1,Natural Gas Heating,2100,390.0,Limited Assurance
+2024,Rotterdam Logistics Hub,Scope 2,Purchased Electricity (Market),5100,610.0,Limited Assurance
+2024,Utrecht Packaging Plant,Scope 2,Purchased Electricity (Market),3400,410.0,Limited Assurance
+2025,Rotterdam Logistics Hub,Scope 1,Stationary & Fleet Fuel,3900,960.0,Internal Unaudited
+2025,Utrecht Packaging Plant,Scope 1,Natural Gas Heating,1950,360.0,Internal Unaudited
+2025,Rotterdam Logistics Hub,Scope 2,Purchased Electricity (Market),5250,420.0,Internal Unaudited
+2025,Utrecht Packaging Plant,Scope 2,Purchased Electricity (Market),3300,290.0,Internal Unaudited
