@@ -1,0 +1,27 @@
+# Virtual environments & caches
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.pytest_cache/
+
+# Version control & CI
+.git/
+.github/
+
+# Local SQLite databases & generated PDF outputs
+data/*.db
+data/*.db-wal
+data/*.db-shm
+output/*.pdf
+
+# CLI skill directory junctions / symlinks
+.claude/
+.gemini/
+
+# Private planning docs
+PRD.md
+Roadmap.md

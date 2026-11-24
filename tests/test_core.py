@@ -1,0 +1,142 @@
+import json
+import shutil
+import sqlite3
+import sys
+from pathlib import Path
+
+import pytest
+from rich.console import Console
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+SRC_DIR = REPO_ROOT / "src"
+if str(SRC_DIR) not in sys.path:
+    sys.path.insert(0, str(SRC_DIR))
+
+import dashboard  # noqa: E402
+import db  # noqa: E402
+import ingestor  # noqa: E402
+import report_builder  # noqa: E402
+
+
+def test_sqlite_initialization(tmp_path: Path) -> None:
+    db_path = tmp_path / "test_init.db"
+    db.init_db(db_path)
+    assert db_path.exists()
+
+    with sqlite3.connect(db_path) as conn:
+        tables = {
+            row[0]
+            for row in conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table';"
+            ).fetchall()
+        }
+    expected = {
+        "documents",
+        "document_pages",
+        "esrs_requirements",
+        "assessments",
+        "disclosure_drafts",
+    }
+    assert expected.issubset(tables)
+
+
+def test_yaml_seeding(tmp_path: Path) -> None:
+    db_path = tmp_path / "test_seed.db"
+    yaml_path = REPO_ROOT / "config" / "esrs_standards.yaml"
+    db.init_db(db_path)
+
+    seeded_count = db.seed_yaml(yaml_path=yaml_path, db_path=db_path)
+    assert seeded_count >= 9
+
+    # Re-seeding must be idempotent (upsert without duplicates)
+    second_count = db.seed_yaml(yaml_path=yaml_path, db_path=db_path)
+    assert second_count == seeded_count
+
+    with db.get_connection(db_path) as conn:
+        rows = conn.execute("SELECT req_id, framework FROM esrs_requirements;").fetchall()
+    req_ids = {r["req_id"] for r in rows}
+    assert len(rows) == seeded_count
+    assert {"ESRS-E1-1", "ESRS-E1-6", "ESRS-E5-5", "VS-B3-1"}.issubset(req_ids)
+
+
+def test_sha256_duplicate_skipping_on_sample(tmp_path: Path) -> None:
+    sample_dir = REPO_ROOT / "data" / "sample"
+    assert (sample_dir / "sample_emissions.csv").exists()
+    assert (sample_dir / "sample_sustainability_report.pdf").exists()
+
+    db_path = tmp_path / "test_ingest.db"
+    db.init_db(db_path)
+
+    first_run = ingestor.ingest_directory(sample_dir, db_path=db_path)
+    assert len(first_run) == 2
+    assert all(item["status"] == "ingested" for item in first_run)
+
+    # Re-ingesting identical directory must skip both via SHA-256 hash
+    second_run = ingestor.ingest_directory(sample_dir, db_path=db_path)
+    assert len(second_run) == 2
+    assert all(item["status"] == "skipped_duplicate" for item in second_run)
+
+    # Renamed copy with identical bytes must also be skipped
+    renamed_pdf = tmp_path / "renamed_report.pdf"
+    shutil.copy2(sample_dir / "sample_sustainability_report.pdf", renamed_pdf)
+    renamed_result = ingestor.ingest_file(renamed_pdf, db_path=db_path)
+    assert renamed_result["status"] == "skipped_duplicate"
+
+    with db.get_connection(db_path) as conn:
+        doc_count = conn.execute("SELECT COUNT(*) FROM documents;").fetchone()[0]
+        page_count = conn.execute("SELECT COUNT(*) FROM document_pages;").fetchone()[0]
+    assert doc_count == 2
+    assert page_count == 4
+
+
+def test_dashboard_and_hitl_gate(tmp_path: Path) -> None:
+    db_path = tmp_path / "test_dash.db"
+    pdf_out = tmp_path / "pack.pdf"
+    draft_file = tmp_path / "ESRS-E5-5.md"
+
+    db.init_db(db_path)
+    db.seed_yaml(REPO_ROOT / "config" / "esrs_standards.yaml", db_path)
+    ingestor.ingest_directory(REPO_ROOT / "data" / "sample", db_path=db_path)
+
+    with db.get_connection(db_path) as conn:
+        pdf_doc = conn.execute(
+            "SELECT doc_id FROM documents WHERE filename = 'sample_sustainability_report.pdf';"
+        ).fetchone()
+    assert pdf_doc is not None
+
+    db.cmd_save_assessment(
+        db_path,
+        json.dumps(
+            {
+                "req_id": "ESRS-E5-5",
+                "doc_id": pdf_doc["doc_id"],
+                "readiness_score": 2.0,
+                "evidence_quote": "Our flagship retail line now features 100% carbon neutral packaging across all Dutch supermarkets",
+                "page_number": 1,
+                "gap_reason": "Missing packaging weight outflows and LCA boundaries.",
+                "greenwash_flag": 1,
+                "greenwash_reason": "Unsubstantiated '100% carbon neutral packaging' claim.",
+            }
+        ),
+    )
+
+    draft_file.write_text(
+        "The report claims carbon-neutral packaging [Source: sample_sustainability_report.pdf, p.1]. "
+        "[DATA GAP: Substantiate or remove claim.]",
+        encoding="utf-8",
+    )
+    db.cmd_save_draft(db_path, "ESRS-E5-5", draft_file)
+
+    console = Console(record=True, width=120)
+    data = dashboard.render_dashboard(db_path=db_path, console=console)
+    output = console.export_text()
+    assert data["counts"]["documents"] == 2
+    assert len(data["greenwash_alerts"]) == 1
+    assert "EU Green Claims Flag" in output
+    assert "ESRS-E5-5" in output
+
+    # HITL gate blocks export while human_approved = 0
+    with pytest.raises(SystemExit) as exc:
+        report_builder.build_assurance_pack(db_path=db_path, output_path=pdf_out)
+    assert exc.value.code == 1
+    assert not pdf_out.exists()
