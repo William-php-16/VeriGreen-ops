@@ -8,8 +8,8 @@ This document is the authoritative specification for the SQLite database (`data/
 
 | Layer | Files / Directories | Contract |
 | :--- | :--- | :--- |
-| **System Core Engine** | `src/db.py`, `src/ingestor.py`, `src/report_builder.py`, `DATA_CONTRACT.md`, `AGENTS.md`, `CLAUDE.md`, `GEMINI.md` | Deterministic infrastructure. Never modified during normal audit runs. |
-| **User-Editable Config** | `config/esrs_standards.yaml`, `config/company_context.md` | Users edit regulatory rulebooks (`ESRS_2026` / `VS`) and company metadata without changing `src/`. |
+| **System Core Engine** | `src/db.py`, `src/ingestor.py`, `src/crawler.py`, `src/report_builder.py`, `DATA_CONTRACT.md`, `AGENTS.md`, `CLAUDE.md`, `GEMINI.md` | Deterministic infrastructure. Never modified during normal audit runs. |
+| **User-Editable Config** | `config/esrs_standards.yaml`, `config/portals.yaml`, `config/company_context.md` | Users edit regulatory rulebooks (`ESRS_2026` / `VS`), target crawl portals, and company metadata without changing `src/`. |
 | **User-Editable Evidence** | `data/raw_docs/` | Users drop corporate `.pdf` and `.csv` files here. |
 | **Modular Skills** | `skills/<skill>/SKILL.md` | Prompt workflows invoking `src/` CLI subcommands. |
 | **Generated Artifacts** | `data/audit_pipeline.db`, `data/sample/*`, `output/*.pdf` | Created and updated exclusively by `src/` and `scripts/`. |
@@ -148,6 +148,14 @@ Subcommands:
     2. Audit & Greenwashing Alerts
     3. Human-Approved ESRS/VS Disclosures
 
+### 4.4 `src/crawler.py`
+- **Invocation:** `python src/crawler.py (--url <URL> | --batch) [--portals config/portals.yaml] [--dir data/raw_docs] [--db data/audit_pipeline.db] [--all-files]`
+- **Behavior:**
+  1. Accepts either `--url <URL>` (single webpage or direct `.pdf`/`.csv` URL) or `--batch` (all enabled entries in `config/portals.yaml`).
+  2. Parses HTML with `beautifulsoup4` to discover absolute `.pdf` and `.csv` links, filtering by ESG/sustainability keywords by default unless `--all-files` is passed.
+  3. Downloads valid files into `--dir` (`data/raw_docs/` by default) using collision-safe filenames.
+  4. Passes each downloaded file directly into `ingest_file()` (`src/ingestor.py`) so SHA-256 deduplication skips identical documents without creating duplicate database rows.
+
 ---
 
 ## 5. `config/esrs_standards.yaml` Schema
@@ -166,4 +174,17 @@ requirements:
     requirement_text: "Detailed disclosure requirement..."
     is_quantitative: false
     mandatory: true
+```
+
+---
+
+## 6. `config/portals.yaml` Schema
+
+```yaml
+version: "1.0"
+portals:
+  - name: "Company or Portal Name"
+    url: "https://example.com/sustainability-reports"
+    enabled: true                 # Set false to skip in --batch runs
+    notes: "Optional description"
 ```

@@ -1,0 +1,31 @@
+# VeriGreen-ops Target Sustainability Portals (User-Editable)
+#
+# Used by:
+#   Windows:     .\.venv\Scripts\python.exe src\crawler.py --batch
+#   macOS/Linux: .venv/bin/python src/crawler.py --batch
+#
+# How to add your own target company or supplier portal:
+#   1. Append a new entry under `portals:` with `name`, `url`, and `enabled: true`.
+#   2. Point `url` to the organization's sustainability/ESG reports webpage (or directly
+#      to a .pdf / .csv file URL).
+#   3. By default, `src/crawler.py` filters discovered .pdf and .csv links using
+#      ESG/sustainability keywords (pass `--all-files` to download every .pdf/.csv link).
+#   4. Set `enabled: false` on any portal you want to temporarily skip in batch runs.
+
+version: "1.0"
+
+portals:
+  - name: "EFRAG Sustainability Reporting (ESRS)"
+    url: "https://www.efrag.org/en/sustainability-reporting"
+    enabled: true
+    notes: "Official EFRAG sustainability reporting and ESRS publication portal."
+
+  - name: "Global Reporting Initiative (GRI) Standards & Resources"
+    url: "https://www.globalreporting.org/standards/"
+    enabled: true
+    notes: "Public GRI sustainability reporting standards and PDF downloads."
+
+  - name: "European Commission — Corporate Sustainability Reporting"
+    url: "https://finance.ec.europa.eu/capital-markets-union-and-financial-markets/company-reporting-and-auditing/company-reporting/corporate-sustainability-reporting_en"
+    enabled: true
+    notes: "EU CSRD legislative overview and official reference documents."

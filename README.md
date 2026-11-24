@@ -13,32 +13,31 @@
 ## Architecture Overview
 
 ```text
-  User Drop Zone                 User Rulebook & Profile
-  data/raw_docs/ (*.pdf, *.csv)  config/esrs_standards.yaml
-                                 config/company_context.md
-         |                                  |
-         v                                  v
-  +------------------+              +------------------+
-  | src/ingestor.py  |              |    src/db.py     |
-  | SHA-256 dedup,   | -----------> | SQLite Schema &  |
-  | PyMuPDF & Pandas |              | Audit State CRUD |
-  +------------------+              +------------------+
-                                            ^
-                                            | (invoked via .venv)
-  +-----------------------------------------+-----------------------------+
-  | Native CLI Agent Brain (AGENTS.md / CLAUDE.md / GEMINI.md)            |
-  | Modular Skills: skills/<name>/SKILL.md                                |
-  |   /ingest -> /assess -> /verify -> /greenwash -> /draft -> /approve   |
-  +-----------------------------------------+-----------------------------+
-                                            |
-                                            v
-                                  +--------------------+
-                                  | src/report_builder |
-                                  | HITL Gate + fpdf2  |
-                                  +--------------------+
-                                            |
-                                            v
-                             output/verigreen_assurance_pack.pdf
+  Public ESG Portals             User Drop Zone                 User Rulebook & Profile
+  config/portals.yaml / --url    data/raw_docs/ (*.pdf, *.csv)  config/esrs_standards.yaml
+         |                              |                       config/company_context.md
+         v                              v                                  |
+  +------------------+          +------------------+              +------------------+
+  |  src/crawler.py  | -------> | src/ingestor.py  |              |    src/db.py     |
+  | httpx + bs4 link |          | SHA-256 dedup,   | -----------> | SQLite Schema &  |
+  | discovery        |          | PyMuPDF & Pandas |              | Audit State CRUD |
+  +------------------+          +------------------+              +------------------+
+                                                                            ^
+                                                                            | (invoked via .venv)
+  +-------------------------------------------------------------------------+------------------+
+  | Native CLI Agent Brain (AGENTS.md / CLAUDE.md / GEMINI.md)                                 |
+  | Modular Skills: skills/<name>/SKILL.md                                                     |
+  |   /crawl -> /ingest -> /assess -> /verify -> /greenwash -> /draft -> /approve -> /export   |
+  +-------------------------------------------------------------------------+------------------+
+                                                                            |
+                                                                            v
+                                                                  +--------------------+
+                                                                  | src/report_builder |
+                                                                  | HITL Gate + fpdf2  |
+                                                                  +--------------------+
+                                                                            |
+                                                                            v
+                                                             output/verigreen_assurance_pack.pdf
 ```
 
 ### Repository Layout
@@ -48,7 +47,9 @@
 | `AGENTS.md`, `CLAUDE.md`, `GEMINI.md` | Cross-CLI agent brain enforcing citation, numeric tolerance, and HITL rules |
 | `DATA_CONTRACT.md` | Authoritative SQLite schema, 1.0–5.0 rubric, and CLI contract |
 | `config/esrs_standards.yaml` | User-editable regulatory rulebook (`ESRS_2026` and `VS` modules) |
+| `config/portals.yaml` | User-editable corporate sustainability portal URLs for `src/crawler.py --batch` |
 | `config/company_context.md` | Organization profile, consolidation boundaries, and fiscal year |
+| `src/crawler.py` | Deterministic ESG report crawler (`httpx` + `beautifulsoup4`) feeding `ingest_file()` |
 | `src/ingestor.py` | Deterministic PDF/CSV ingestor with SHA-256 deduplication |
 | `src/db.py` | SQLite schema initialization, seeding, assessment, draft, and approval CLI |
 | `src/report_builder.py` | Pure-Python `fpdf2` A4 PDF Assurance Pack renderer with HITL gate |
@@ -107,6 +108,7 @@ Inside `claude` or `gemini`, run the modular skills in sequence:
 
 | Command | Skill File | Purpose |
 | :--- | :--- | :--- |
+| `/crawl` | [`skills/crawl/SKILL.md`](skills/crawl/SKILL.md) | Discovers & downloads `.pdf`/`.csv` reports from URLs or `config/portals.yaml` and deduplicates via `ingest_file()` |
 | `/ingest` | [`skills/ingest/SKILL.md`](skills/ingest/SKILL.md) | SHA-256 deduplication, page-by-page PDF indexing, and CSV-to-Markdown conversion |
 | `/assess` | [`skills/assess/SKILL.md`](skills/assess/SKILL.md) | 1.0–5.0 readiness scoring with exact verbatim quotes and 1-indexed page numbers |
 | `/verify` | [`skills/verify/SKILL.md`](skills/verify/SKILL.md) | Reconciles quantitative PDF claims against CSV tables (1% relative tolerance) |
@@ -117,6 +119,21 @@ Inside `claude` or `gemini`, run the modular skills in sequence:
 | `/status` | [`skills/status/SKILL.md`](skills/status/SKILL.md) | Prints SQLite pipeline counts and readiness state |
 
 Want to add a custom check (e.g., `/eudr-check` or `/cbam-check`)? Follow [`skills/ADDING_A_SKILL.md`](skills/ADDING_A_SKILL.md).
+
+### Web Portal Crawling (`src/crawler.py` & `config/portals.yaml`)
+
+Fetch public corporate sustainability PDFs/CSVs directly into `data/raw_docs/` with automatic ESG keyword filtering and SHA-256 deduplication:
+
+```powershell
+# Single sustainability portal or direct PDF/CSV URL
+.\.venv\Scripts\python.exe src\crawler.py --url "https://example.com/sustainability-reports"
+
+# Batch crawl all enabled portals in config/portals.yaml
+.\.venv\Scripts\python.exe src\crawler.py --batch
+
+# Include all .pdf/.csv links on a page without ESG keyword filtering
+.\.venv\Scripts\python.exe src\crawler.py --url "https://example.com/reports" --all-files
+```
 
 ---
 
