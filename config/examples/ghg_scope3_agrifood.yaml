@@ -1,0 +1,78 @@
+# VeriGreen-ops Example Regulatory Rulebook (User-Editable)
+# Aligns with GHG Protocol Corporate Value Chain (Scope 3 Category 1) and
+# Forest, Land and Agriculture (FLAG) Guidance for agrifood supply chains.
+#
+# Seed into SQLite without wiping existing data:
+#   python src/db.py seed --yaml config/examples/ghg_scope3_agrifood.yaml
+
+version: "2026.1"
+active_frameworks:
+  - GHG_FLAG_AGRIFOOD
+
+requirements:
+  - req_id: "GHG-S3-CAT1"
+    framework: "GHG_FLAG_AGRIFOOD"
+    standard: "GHG Protocol Scope 3 Cat. 1"
+    topic: "Purchased Agricultural Goods & Packaging Emissions"
+    requirement_text: >
+      Disclose gross Scope 3 Category 1 (Purchased Goods and Services) emissions
+      in tCO2e for raw agricultural commodities and packaging materials, specifying
+      the share derived from supplier-specific primary data versus secondary
+      cradle-to-gate emission factor databases (e.g., Agri-footprint, Ecoinvent).
+    is_quantitative: true
+    mandatory: true
+
+  - req_id: "GHG-FLAG-LUC"
+    framework: "GHG_FLAG_AGRIFOOD"
+    standard: "GHG Protocol Land Sector & FLAG"
+    topic: "Direct & Indirect Land Use Change (LUC) Emissions"
+    requirement_text: >
+      Disclose gross Land Use Change (LUC) CO2 emissions in tCO2e amortized over
+      a 20-year assessment period for sourced crop, dairy, livestock, and timber
+      packaging commodities, reconciled against commodity sourcing volumes (tonnes).
+    is_quantitative: true
+    mandatory: true
+
+  - req_id: "GHG-FLAG-MGT"
+    framework: "GHG_FLAG_AGRIFOOD"
+    standard: "GHG Protocol Land Sector & FLAG"
+    topic: "Agricultural Land Management & Fertilizer N2O Emissions"
+    requirement_text: >
+      Disclose on-farm land management GHG emissions (tCO2e) covering synthetic
+      and organic nitrogen fertilizer N2O emissions, enteric fermentation, manure
+      management, and agricultural machinery fuel use separate from LUC emissions.
+    is_quantitative: true
+    mandatory: true
+
+  - req_id: "GHG-FLAG-REM"
+    framework: "GHG_FLAG_AGRIFOOD"
+    standard: "GHG Protocol Land Sector & FLAG"
+    topic: "Biogenic Carbon Removals, Soil Carbon & Permanence"
+    requirement_text: >
+      Disclose land-based biogenic CO2 removals (tCO2e) from soil organic carbon
+      sequestration or agroforestry separately from gross emissions, documenting
+      MRV methodology, ongoing storage monitoring, and reversal accounting rules.
+    is_quantitative: true
+    mandatory: false
+
+  - req_id: "GHG-FLAG-CH4"
+    framework: "GHG_FLAG_AGRIFOOD"
+    standard: "GHG Protocol FLAG"
+    topic: "Biogenic Methane (CH4) & Non-CO2 Disaggregation"
+    requirement_text: >
+      Disclose biogenic methane (CH4) emissions in metric tonnes of CH4 and tCO2e
+      (with GWP100 conversion factor stated) separately from fossil CO2 and N2O
+      within Scope 1 and Scope 3 agricultural supply chains.
+    is_quantitative: true
+    mandatory: true
+
+  - req_id: "GHG-FLAG-SBTI"
+    framework: "GHG_FLAG_AGRIFOOD"
+    standard: "SBTi FLAG Guidance"
+    topic: "Separate FLAG Reduction Targets & Deforestation Cut-Off"
+    requirement_text: >
+      Disclose dedicated FLAG science-based emission reduction targets (separate
+      from non-FLAG energy/industrial targets) alongside a public commitment to
+      zero deforestation across primary deforestation-linked commodities.
+    is_quantitative: false
+    mandatory: true

@@ -1,0 +1,79 @@
+# VeriGreen-ops Example Regulatory Rulebook (User-Editable)
+# Aligns with RSPO Principles & Criteria (P&C) and ISPO certification requirements
+# covering HCV/HCS conservation, peatland protection, FPIC, and mill-to-plantation
+# traceability.
+#
+# Seed into SQLite without wiping existing data:
+#   python src/db.py seed --yaml config/examples/rspo_ispo_palm_sustainability.yaml
+
+version: "2026.1"
+active_frameworks:
+  - PALM_RSPO_ISPO
+
+requirements:
+  - req_id: "PALM-HCV-HCS"
+    framework: "PALM_RSPO_ISPO"
+    standard: "RSPO P&C / ISPO"
+    topic: "High Conservation Value (HCV) & High Carbon Stock (HCS) Protection"
+    requirement_text: >
+      Disclose HCV and HCS assessments conducted prior to any land clearing,
+      confirming zero deforestation after the applicable cut-off date and
+      documenting set-aside conservation area hectares and monitoring plans.
+    is_quantitative: true
+    mandatory: true
+
+  - req_id: "PALM-PEAT-1"
+    framework: "PALM_RSPO_ISPO"
+    standard: "RSPO P&C / ISPO"
+    topic: "Peatland Protection & Water-Table Management"
+    requirement_text: >
+      Disclose zero new planting on peatlands regardless of depth, total legacy
+      peatland hectares under management, drainability assessments, and
+      compliance with target groundwater depth thresholds (cm).
+    is_quantitative: true
+    mandatory: true
+
+  - req_id: "PALM-FPIC-1"
+    framework: "PALM_RSPO_ISPO"
+    standard: "RSPO P&C / ISPO"
+    topic: "Free, Prior and Informed Consent (FPIC) & Land Tenure"
+    requirement_text: >
+      Disclose documented FPIC processes with Indigenous Peoples and local
+      communities prior to concession development or replanting, participatory
+      mapping records, and active land-dispute resolution outcomes.
+    is_quantitative: false
+    mandatory: true
+
+  - req_id: "PALM-TTP-1"
+    framework: "PALM_RSPO_ISPO"
+    standard: "RSPO Supply Chain / ISPO"
+    topic: "Mill-to-Plantation Traceability (TTM & TTP) & Certified Volume"
+    requirement_text: >
+      Disclose percentage of sourced palm oil, palm kernel oil, and derivatives
+      traceable to mill (TTM) and traceable to plantation/polygon coordinates
+      (TTP), plus tonnage split across RSPO Identity Preserved, Segregated,
+      Mass Balance, and ISPO certified supply chains.
+    is_quantitative: true
+    mandatory: true
+
+  - req_id: "PALM-NDPE-1"
+    framework: "PALM_RSPO_ISPO"
+    standard: "NDPE / RSPO P&C"
+    topic: "Zero Burning, Worker Rights & Smallholder Inclusion"
+    requirement_text: >
+      Disclose strict zero-burning land preparation controls, hotspot satellite
+      monitoring, fair wage and no-recruitment-fee labor safeguards, and
+      independent smallholder training and RSPO/ISPO certification support.
+    is_quantitative: false
+    mandatory: true
+
+  - req_id: "PALM-GHG-1"
+    framework: "PALM_RSPO_ISPO"
+    standard: "RSPO PalmGHG / ISPO"
+    topic: "Palm Oil Mill Effluent (POME) Methane Capture & GHG Intensity"
+    requirement_text: >
+      Disclose mill-level GHG intensity (tCO2e per tonne CPO/PKO) calculated via
+      PalmGHG or equivalent methodology, including percentage of mills equipped
+      with biogas/methane capture facilities.
+    is_quantitative: true
+    mandatory: false

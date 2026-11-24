@@ -1,0 +1,79 @@
+# VeriGreen-ops Example Regulatory Rulebook (User-Editable)
+# Aligns with EU Corporate Sustainability Due Diligence Directive (CSDDD),
+# Directive (EU) 2024/1760 on corporate sustainability due diligence across
+# chains of activities.
+#
+# Seed into SQLite without wiping existing data:
+#   python src/db.py seed --yaml config/examples/csddd_value_chain_due_diligence.yaml
+
+version: "2024.1760"
+active_frameworks:
+  - CSDDD_2024
+
+requirements:
+  - req_id: "CSDDD-ART5-1"
+    framework: "CSDDD_2024"
+    standard: "CSDDD Art. 5 & 7"
+    topic: "Due Diligence Integration into Policies & Risk Management"
+    requirement_text: >
+      Disclose the risk-based human rights and environmental due diligence policy
+      developed in prior consultation with employees and representatives, including
+      the corporate code of conduct and annual policy update governance.
+    is_quantitative: false
+    mandatory: true
+
+  - req_id: "CSDDD-ART8-1"
+    framework: "CSDDD_2024"
+    standard: "CSDDD Art. 8"
+    topic: "Mapping & Assessing Actual and Potential Adverse Impacts"
+    requirement_text: >
+      Disclose the mapping of own operations, subsidiaries, and upstream/downstream
+      business partners across the chain of activities to identify, assess, and
+      prioritize severe and likely human rights and environmental adverse impacts.
+    is_quantitative: false
+    mandatory: true
+
+  - req_id: "CSDDD-ART10-1"
+    framework: "CSDDD_2024"
+    standard: "CSDDD Art. 10 & 11"
+    topic: "Prevention, Mitigation & Corrective Action Plans"
+    requirement_text: >
+      Disclose time-bound prevention and corrective action plans, contractual
+      assurances obtained from direct business partners, SME capacity-building
+      investments, and verified third-party supplier audit completion percentages.
+    is_quantitative: true
+    mandatory: true
+
+  - req_id: "CSDDD-ART12-1"
+    framework: "CSDDD_2024"
+    standard: "CSDDD Art. 12 & 14"
+    topic: "Remediation, Notification Mechanism & Complaints Procedure"
+    requirement_text: >
+      Disclose accessible, fair, and confidential notification mechanisms and
+      complaints procedures for affected persons, trade unions, and civil society,
+      including count and resolution rate of substantiated value-chain grievances.
+    is_quantitative: true
+    mandatory: true
+
+  - req_id: "CSDDD-ART15-1"
+    framework: "CSDDD_2024"
+    standard: "CSDDD Art. 15 & 16"
+    topic: "Periodic Effectiveness Monitoring & Public Reporting"
+    requirement_text: >
+      Disclose annual assessments (minimum every 12 months) evaluating the
+      adequacy and effectiveness of due diligence measures using qualitative and
+      quantitative indicators across own operations and business partner tiers.
+    is_quantitative: false
+    mandatory: true
+
+  - req_id: "CSDDD-ART22-1"
+    framework: "CSDDD_2024"
+    standard: "CSDDD Art. 22"
+    topic: "Climate Change Transition Plan (1.5C Paris Alignment)"
+    requirement_text: >
+      Disclose and put into effect a transition plan for climate change mitigation
+      aiming to ensure business model and strategy compatibility with limiting
+      global warming to 1.5C and achieving climate neutrality by 2050, including
+      time-bound 2030/five-year GHG targets and planned decarbonization CapEx.
+    is_quantitative: true
+    mandatory: true

@@ -154,19 +154,23 @@ def cmd_status(db_path: Path) -> None:
     print(json.dumps({"db_path": str(db_path), "counts": summary}, indent=2))
 
 
-def cmd_list_unassessed(db_path: Path) -> None:
+def cmd_list_unassessed(db_path: Path, framework: str | None = None) -> None:
+    query = """
+        SELECT r.req_id, r.framework, r.standard, r.topic, r.requirement_text, r.is_quantitative,
+               d.doc_id, d.filename, d.doc_type
+        FROM esrs_requirements r
+        CROSS JOIN documents d
+        LEFT JOIN assessments a ON a.req_id = r.req_id AND a.doc_id = d.doc_id
+        WHERE a.assess_id IS NULL
+    """
+    params: list[str] = []
+    if framework:
+        query += " AND r.framework = ?"
+        params.append(framework)
+    query += " ORDER BY d.doc_id, r.req_id;"
+
     with get_connection(db_path) as conn:
-        rows = conn.execute(
-            """
-            SELECT r.req_id, r.standard, r.topic, r.requirement_text, r.is_quantitative,
-                   d.doc_id, d.filename, d.doc_type
-            FROM esrs_requirements r
-            CROSS JOIN documents d
-            LEFT JOIN assessments a ON a.req_id = r.req_id AND a.doc_id = d.doc_id
-            WHERE a.assess_id IS NULL
-            ORDER BY d.doc_id, r.req_id;
-            """
-        ).fetchall()
+        rows = conn.execute(query, params).fetchall()
     print(json.dumps([dict(r) for r in rows], indent=2))
 
 
@@ -266,8 +270,12 @@ def main() -> None:
     p_init.add_argument("--reset", action="store_true", help="Drop existing DB first")
     p_init.add_argument("--yaml", type=Path, default=DEFAULT_YAML_PATH)
 
+    p_seed = sub.add_parser("seed", help="Upsert an additional YAML rulebook without wiping existing assessments")
+    p_seed.add_argument("--yaml", type=Path, required=True, help="Path to YAML rulebook file")
+
     sub.add_parser("status", help="Show table row counts")
-    sub.add_parser("list-unassessed", help="List unassessed (req_id, doc_id) pairs")
+    p_unassessed = sub.add_parser("list-unassessed", help="List unassessed (req_id, doc_id) pairs")
+    p_unassessed.add_argument("--framework", default=None, help="Optional framework filter (e.g. ESRS_2026, VS, EU_SFDR_PAI)")
 
     p_pages = sub.add_parser("get-pages", help="Get extracted pages for a document")
     p_pages.add_argument("--doc-id", required=True)
@@ -289,10 +297,14 @@ def main() -> None:
         init_db(args.db, reset=args.reset)
         count = seed_yaml(args.yaml, args.db)
         print(f"Initialized {args.db} and seeded {count} requirements.")
+    elif args.command == "seed":
+        init_db(args.db, reset=False)
+        count = seed_yaml(args.yaml, args.db)
+        print(f"Seeded {count} requirements from {args.yaml} into {args.db}.")
     elif args.command == "status":
         cmd_status(args.db)
     elif args.command == "list-unassessed":
-        cmd_list_unassessed(args.db)
+        cmd_list_unassessed(args.db, framework=args.framework)
     elif args.command == "get-pages":
         cmd_get_pages(args.db, args.doc_id)
     elif args.command == "save-assessment":
