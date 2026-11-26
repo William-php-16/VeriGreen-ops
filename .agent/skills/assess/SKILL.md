@@ -3,9 +3,9 @@ name: assess
 description: Evaluate ingested documents against Revised ESRS 2026 and Voluntary SME (VS) requirements using a strict 1.0-5.0 readiness rubric with exact verbatim page citations.
 ---
 
-# `/assess` — ESRS / VS Readiness Scoring
+# `/verigreen assess` - ESRS / VS Readiness Scoring
 
-Score each unassessed `(req_id, doc_id)` pair on the strict `1.0`–`5.0` readiness scale and persist exact, database-verified verbatim citations via `src/db.py save-assessment`.
+Invoke via `/verigreen assess` to score each unassessed `(req_id, doc_id)` pair on the strict `1.0`–`5.0` readiness scale and persist exact, database-verified verbatim citations via `src/db.py save-assessment`.
 
 ## Pre-Flight Checks
 
@@ -59,4 +59,4 @@ If `save-assessment` rejects a quote or page number, re-read the exact page text
 
 ## Output
 
-Summarize the scored requirements, highlight critical gaps (`readiness_score < 3.5`), and suggest running `/verify` (for quantitative reconciliation) and `/greenwash` next.
+Summarize the scored requirements, highlight critical gaps (`readiness_score < 3.5`), and suggest running `/verigreen verify` (for quantitative reconciliation) and `/verigreen greenwash` next.

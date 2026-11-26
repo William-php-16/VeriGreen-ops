@@ -3,9 +3,9 @@ name: verify
 description: Cross-check quantitative sustainability claims in PDF assessments against ingested CSV operational and emissions tables within a 1% tolerance.
 ---
 
-# `/verify` — Quantitative Narrative vs. CSV Reconciliation
+# `/verigreen verify` - Quantitative Narrative vs. CSV Reconciliation
 
-Audit every quantitative requirement (`is_quantitative = 1`) by mathematically comparing figures claimed in PDF `evidence_quote` text against ingested CSV Markdown tables (`doc_type = 'csv'`).
+Invoke via `/verigreen verify` to audit every quantitative requirement (`is_quantitative = 1`) by mathematically comparing figures claimed in PDF `evidence_quote` text against ingested CSV Markdown tables (`doc_type = 'csv'`).
 
 ## Pre-Flight & Data Retrieval
 
@@ -50,4 +50,4 @@ Persist every verification result via `src/db.py update-verification`:
 
 ## Output
 
-Present a reconciliation table showing each quantitative `req_id`, claimed value, CSV-calculated value, variance, and `PASS` (`numeric_verified = 1`) or `FAIL` (`numeric_verified = 0`), then recommend running `/greenwash` or `/draft`.
+Present a reconciliation table showing each quantitative `req_id`, claimed value, CSV-calculated value, variance, and `PASS` (`numeric_verified = 1`) or `FAIL` (`numeric_verified = 0`), then recommend running `/verigreen greenwash` or `/verigreen draft`.

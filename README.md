@@ -54,7 +54,7 @@ flowchart TD
 | :--- | :--- | :--- |
 | Document Retrieval | Sends every page of every PDF into prompt context | Queries SQLite `pages_fts` (`src/db.py search-pages --limit 5`) for top-ranked pages only |
 | Greenwashing Screen | Runs LLM inference across full reports | Runs regex pre-filtering (`src/db.py find-claims`) first; skips LLM screening when zero trigger terms match |
-| Quantitative Math | Relies on LLM mental math over prose and tables | Aggregates CSVs with `pandas` in `src/ingestor.py` and enforces a 1% relative tolerance check in `/verify` |
+| Quantitative Math | Relies on LLM mental math over prose and tables | Aggregates CSVs with `pandas` in `src/ingestor.py` and enforces a 1% relative tolerance check in `/verigreen verify` |
 | Provenance & Sign-Off | Outputs unverified summaries with no export lock | Requires exact page citations, `[DATA GAP]` tags, and `human_approved = 1` before `src/report_builder.py` exports |
 
 ---
@@ -72,7 +72,7 @@ flowchart TD
 | `config/examples/acm_dutch_green_claims.yaml` | `NL_ACM_CLAIMS` | Netherlands ACM Guidelines on Sustainability Claims (ACM 5 Rules of Thumb) | `python src/db.py seed --yaml config/examples/acm_dutch_green_claims.yaml` |
 
 Two supporting YAML files live in `config/` outside the requirement rulebooks:
-- `config/jurisdiction_matrix.yaml`: Maps `(country_region, employee_count, sector)` to mandatory rulebooks and crosswalk blind spots (`GRI`, `ISO 14001`, `TCFD`, `RSPO`, `SBTi`) for `/discover`.
+- `config/jurisdiction_matrix.yaml`: Maps `(country_region, employee_count, sector)` to mandatory rulebooks and crosswalk blind spots (`GRI`, `ISO 14001`, `TCFD`, `RSPO`, `SBTi`) for `/verigreen discover`.
 - `config/portals.yaml`: Lists target sustainability portal URLs for `python src/crawler.py --batch`.
 
 ---
@@ -275,14 +275,25 @@ python src/report_builder.py [--output output/verigreen_assurance_pack.pdf] [--a
 python scripts/create_sample_data.py
 ```
 
-### Agent Workflow & Slash Commands
+### Agent Workflow & Unified `/verigreen` Commands
 
-Configured in [`.agents/workflows/verigreen.md`](.agents/workflows/verigreen.md) and `skills/`:
-- `/verigreen <url>` runs the full pipeline (`crawler.py` -> `/discover` -> `/assess` -> `/verify` -> `/greenwash` -> `/draft`), then prompts for approval before export.
-- `/verigreen batch` crawls enabled entries in `config/portals.yaml` and runs `/assess`.
-- `/verigreen draft <REQ_ID>` compiles a single disclosure draft.
-- `/verigreen export` runs `src/report_builder.py`.
-- Individual stage skills: `/crawl`, `/ingest`, `/discover`, `/assess`, `/verify`, `/greenwash`, `/draft`, `/humanize`, `/approve`, `/export`, `/status`.
+Configured in [`.agent/workflows/verigreen.md`](.agent/workflows/verigreen.md), [`.agents/workflows/verigreen.md`](.agents/workflows/verigreen.md), and [`skills/verigreen/SKILL.md`](skills/verigreen/SKILL.md) (with internal modules in `skills/`):
+
+| Command | Action |
+| :--- | :--- |
+| `/verigreen` or `/verigreen status` | Run `src/dashboard.py` and print the current audit table and next recommended step. |
+| `/verigreen <url>` | Run the full end-to-end audit pipeline (`crawl` -> `discover` -> `assess` -> `verify` -> `greenwash` -> `draft` + `humanize` -> `dashboard`), pausing only at Human Gate 1 (unknown jurisdiction) and Human Gate 2 (draft approval before export). |
+| `/verigreen crawl <url>` or `/verigreen crawl --batch` | Load `skills/crawl/SKILL.md` and run `src/crawler.py` (never fall back to `curl.exe`). |
+| `/verigreen ingest` | Run `src/ingestor.py` to parse local PDFs/CSVs in `data/raw_docs/` into SQLite and index `pages_fts`. |
+| `/verigreen discover` | Load `skills/discover/SKILL.md` to extract company profile, consolidation approach, and boundary exclusions, merge via `src/db.py save-profile`, and auto-seed matched YAML rulebooks. |
+| `/verigreen assess` | Load `skills/assess/SKILL.md` to score unassessed requirements via `src/db.py search-pages` (FTS5) with boundary caps enforced. |
+| `/verigreen verify` | Load `skills/verify/SKILL.md` to run deterministic CSV and YoY math checks. |
+| `/verigreen greenwash` | Load `skills/greenwash/SKILL.md` to run `src/db.py find-claims` and evaluate flagged marketing statements. |
+| `/verigreen draft` | Load `skills/draft/SKILL.md` and apply `skills/humanize/SKILL.md` as the final pass before saving to `disclosure_drafts` (`human_approved = 0`). |
+| `/verigreen draft-rulebook <jurisdiction_or_law>` | Load `skills/draft_rulebook/SKILL.md` to generate, validate, and review a new YAML rulebook in `config/examples/`. |
+| `/verigreen humanize <req_id\|all>` | Load `skills/humanize/SKILL.md` to rewrite existing draft prose without altering numbers, units, quotes, citations, or `[DATA GAP]` tags. |
+| `/verigreen approve <req_id\|all>` | Run `src/db.py approve` to unlock human-verified drafts. |
+| `/verigreen export` | Run `src/report_builder.py` to generate the A4 PDF Assurance Pack (only for `human_approved = 1` drafts). |
 
 </details>
 

@@ -3,9 +3,9 @@ name: discover
 description: Extract company profile and current sustainability frameworks from ingested web/PDF pages, map applicable regulations and crosswalk blind spots via config/jurisdiction_matrix.yaml, save to company_profiles, and auto-seed matching rulebooks.
 ---
 
-# `/discover` — Regulatory Applicability & Framework Cross-Walk
+# `/verigreen discover` - Regulatory Applicability & Framework Cross-Walk
 
-Run immediately after `/crawl` (or `/ingest`) and before `/assess` so the audit uses the exact rulebooks required by the entity's jurisdiction, size, and sector.
+Invoke via `/verigreen discover` immediately after `/verigreen crawl` (or `/verigreen ingest`) and before `/verigreen assess` so the audit uses the exact rulebooks required by the entity's jurisdiction, size, and sector.
 
 ## Steps
 
@@ -17,7 +17,7 @@ Run immediately after `/crawl` (or `/ingest`) and before `/assess` so the audit 
 2. **Evaluate `config/jurisdiction_matrix.yaml`:**
    - Match `(country, employee_count, sector)` against `rules` (`min_employees` / `max_employees`, `country_region`, `sector`) to determine `applicable_regulations` and the required YAML rulebook paths in `config/` and `config/examples/`.
    - Treat `EU` rules (such as `EU-EMPCO-GREEN-CLAIMS`) as applying across all EU member states (including `NL`, `SK`, `DE`, `FR`), and trigger Netherlands-only rules (`NL-ACM-GREEN-CLAIMS`) only when `country` is `NL`.
-   - **Unsupported Jurisdiction / Sector Fallback:** If the company's `country` or `sector` has no matching rulebook in `config/jurisdiction_matrix.yaml`, report the coverage gap to the user and offer to run `skills/draft_rulebook/SKILL.md` (`/draft-rulebook`) to generate and validate a new YAML rulebook before `/assess`.
+   - **Unsupported Jurisdiction / Sector Fallback:** If the company's `country` or `sector` has no matching rulebook in `config/jurisdiction_matrix.yaml`, report the coverage gap to the user and offer to run `/verigreen draft-rulebook` (`skills/draft_rulebook/SKILL.md`) to generate and validate a new YAML rulebook before `/verigreen assess`.
    - For each entry in `detected_frameworks` present under `crosswalks`, record what it covers (`covers`) and its legal gaps (`blind_spots`).
 
 3. **Save Company Profile (Non-Destructive Merge):** Persist new findings via:
@@ -28,8 +28,8 @@ Run immediately after `/crawl` (or `/ingest`) and before `/assess` so the audit 
 4. **Print Compact Regulatory Cross-Walk Table:** Display a concise Markdown table summarizing:
    - Detected Foundation / Framework | Overlaps (`covers`) | Legal Blind Spots (`blind_spots`) | Applicable Mandatory Regulation & Rulebook
 
-5. **Auto-Seed All Matched Rulebooks Before `/assess`:**
+5. **Auto-Seed All Matched Rulebooks Before `/verigreen assess`:**
    - For every matched rulebook file that exists in `config/` or `config/examples/` (without wiping existing data), run:
      - **Windows:** `.\.venv\Scripts\python.exe src/db.py seed --yaml <rulebook_path>`
      - **macOS / Linux:** `.venv/bin/python src/db.py seed --yaml <rulebook_path>`
-   - Do not stop at `config/esrs_standards.yaml` when a more specific rulebook (such as `config/examples/vsme_value_chain_shield.yaml` or `config/examples/acm_dutch_green_claims.yaml`) matches the entity's profile. Complete all `seed` calls before proceeding to `/assess`.
+   - Do not stop at `config/esrs_standards.yaml` when a more specific rulebook (such as `config/examples/vsme_value_chain_shield.yaml` or `config/examples/acm_dutch_green_claims.yaml`) matches the entity's profile. Complete all `seed` calls before proceeding to `/verigreen assess`.

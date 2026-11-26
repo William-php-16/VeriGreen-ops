@@ -3,9 +3,9 @@ name: crawl
 description: Discover and download corporate ESG/sustainability PDF and CSV files from a webpage or config/portals.yaml into data/raw_docs/ and ingest them with SHA-256 deduplication.
 ---
 
-# `/crawl` — Deterministic Sustainability Portal Crawler
+# `/verigreen crawl` - Deterministic Sustainability Portal Crawler
 
-Discover `.pdf` and `.csv` sustainability reports from a public webpage (`--url`) or batch portal list (`--batch` via `config/portals.yaml`), save them locally into `data/raw_docs/`, and ingest them directly into `data/audit_pipeline.db` via `ingest_file()`.
+Invoke via `/verigreen crawl <url>` or `/verigreen crawl --batch`. Discover `.pdf` and `.csv` sustainability reports from a public webpage (`--url`) or batch portal list (`--batch` via `config/portals.yaml`), save them locally into `data/raw_docs/`, and ingest them directly into `data/audit_pipeline.db` via `ingest_file()`.
 
 ## Pre-Flight Checks
 
@@ -44,4 +44,4 @@ By default, `src/crawler.py` filters discovered `.pdf` and `.csv` links for ESG/
    - **Newly ingested documents** (`[INGESTED] <filename> -> doc_id=<doc_id> (<N> pages)`)
    - **SHA-256 skipped duplicates** (`[SKIPPED] <filename> (already ingested as <doc_id>)`)
    - **Warnings or download/extraction errors** (`[WARNING]`)
-2. If one or more new `doc_id`s were ingested, offer to run `/assess` on those new `doc_id`s next.
+2. If one or more new `doc_id`s were ingested, offer to run `/verigreen assess` on those new `doc_id`s next.

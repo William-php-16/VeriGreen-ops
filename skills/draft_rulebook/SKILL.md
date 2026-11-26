@@ -3,9 +3,9 @@ name: draft-rulebook
 description: Generate and validate a new YAML regulatory rulebook in config/examples/ for an uncovered jurisdiction or sector
 ---
 
-# `/draft-rulebook` : Generate & Validate Regulatory Rulebook
+# `/verigreen draft-rulebook` - Generate & Validate Regulatory Rulebook
 
-Use this workflow when `/discover` finds a country or sector with no matching rulebook in `config/jurisdiction_matrix.yaml`.
+Invoke via `/verigreen draft-rulebook <jurisdiction_or_law>` when `/verigreen discover` finds a country or sector with no matching rulebook in `config/jurisdiction_matrix.yaml`.
 
 ## Steps
 

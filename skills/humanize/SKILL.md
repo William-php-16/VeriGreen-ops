@@ -3,9 +3,9 @@ name: humanize
 description: Edit ESRS and Voluntary SME disclosure drafts so they read like an experienced sustainability consultant wrote them, without altering facts, numbers, quotes, citations, or [DATA GAP] tags.
 ---
 
-# `/humanize` — Consultant-Grade ESG Prose Polish
+# `/verigreen humanize` - Consultant-Grade ESG Prose Polish
 
-Rewrite drafted sustainability disclosures so they read cleanly, directly, and credibly, removing generic AI phrasing before saving to `disclosure_drafts`.
+Invoke via `/verigreen humanize <req_id|all>` (or automatically as the final pass of `/verigreen draft`) to rewrite drafted sustainability disclosures so they read cleanly, directly, and credibly, removing generic AI phrasing before saving to `disclosure_drafts`.
 
 ## Immutable Integrity Rule
 

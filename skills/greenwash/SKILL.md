@@ -3,9 +3,9 @@ name: greenwash
 description: Screen extracted evidence quotes against EU Green Claims anti-greenwashing substantiation rules and flag unsubstantiated claims.
 ---
 
-# `/greenwash` — EU Green Claims Anti-Greenwashing Screen
+# `/verigreen greenwash` - EU Green Claims Anti-Greenwashing Screen
 
-Inspect all non-empty `evidence_quote` rows in `assessments` for vague, misleading, or unsubstantiated environmental marketing claims under EU Green Claims substantiation standards.
+Invoke via `/verigreen greenwash` to inspect all non-empty `evidence_quote` rows in `assessments` for vague, misleading, or unsubstantiated environmental marketing claims under EU Green Claims substantiation standards.
 
 ## Pre-Flight & Data Retrieval
 
@@ -50,4 +50,4 @@ When `flag = 1`, `greenwash_reason` MUST quote the offending phrase and state th
 
 ## Output
 
-Summarize all flagged `assess_id` / `req_id` items with their source page citations and recommended compliant rewrites, then suggest running `/draft`.
+Summarize all flagged `assess_id` / `req_id` items with their source page citations and recommended compliant rewrites, then suggest running `/verigreen draft`.
