@@ -11,9 +11,31 @@ Local-first CLI agent and deterministic SQLite pipeline for CSRD (Revised ESRS 2
 
 `VeriGreen-ops` pairs deterministic Python scripts (`pymupdf`, `pandas`, `fpdf2`, `rich`, `httpx`) and local SQLite (`data/audit_pipeline.db`) with modular Agent Skills (`skills/`) for Antigravity (`agy`), Claude Code, Gemini CLI, and Codex CLI.
 
-![VeriGreen-ops Terminal Dashboard](docs/assets/dashboard.png)
+---
 
-*Terminal readiness dashboard rendered by `python src/dashboard.py`, showing pipeline counts, human approval progress, requirement scores, and EU Green Claims alerts.*
+## Sample Audit Results
+
+End-to-end `/verigreen` audit run against `Oikocredit-Annual-Report-2025.pdf` (116 pages, 29 seeded requirements across `ESRS_2026`, `VS`, `EU_SFDR_PAI`, and `NL_ACM_CLAIMS`):
+
+![VeriGreen-ops 6-Step Agent Pipeline Execution](Photo/Screenshot%202026-11-26%20214257.png)
+
+*Live 6-step pipeline execution (`ingest` -> `discover` -> `assess` -> `verify` -> `greenwash` -> `draft` + `humanize` -> `dashboard`).*
+
+![Ingestion, Organization Profile, and Regulatory Cross-Walk](Photo/Screenshot%202026-11-26%20214621.png)
+
+*Stage 1–2 output: entity profile extraction (`discover`) and regulatory cross-walk against `config/jurisdiction_matrix.yaml`, showing overlaps, legal blind spots, and auto-seeded rulebooks.*
+
+![Readiness Scoring, Verification, Greenwashing Alerts, and HITL Gate](Photo/Screenshot%202026-11-26%20214635.png)
+
+*Stage 3–4 output: average readiness scoring (`2.22 / 5.0`), quantitative CSV/YoY verification checks, flagged EU Green Claims / NL ACM alerts, and 29 humanized drafts queued at Human Gate 2 (`human_approved = 0`).*
+
+![VeriGreen-ops Rich Dashboard Readiness Matrix](Photo/Screenshot%202026-11-26%20220828.png)
+
+*Terminal dashboard (`src/dashboard.py`): pipeline counts (4 documents, 141 pages, 29 requirements, 47 assessments, 29 drafts), HITL approval progress (`0/29`), and the ESRS / VSME / NL ACM / SFDR readiness matrix.*
+
+![EU Green Claims and NL ACM Flagged Warnings](Photo/Screenshot%202026-11-26%20220814.png)
+
+*Detailed EU Green Claims and NL ACM warning panel displaying 4 flagged claims (`ACM-RULE-2`, `ESRS-E1-4`, `ESRS-E5-5`) with verbatim quotes, page citations, and substantiation failure reasons.*
 
 ---
 
