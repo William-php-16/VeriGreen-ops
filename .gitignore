@@ -28,5 +28,4 @@ Roadmap.md
 
 # Local dev-only AI tooling
 graphify-out/
-.agents/rules/graphify.md
-.agents/workflows/graphify.md
+Graphify/
