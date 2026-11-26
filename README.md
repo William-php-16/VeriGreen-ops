@@ -4,7 +4,7 @@ Local-first CLI agent and deterministic SQLite pipeline for CSRD (Revised ESRS 2
 
 [![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/downloads/)
 [![SQLite FTS5](https://img.shields.io/badge/SQLite-FTS5-003B57?logo=sqlite&logoColor=white)](https://www.sqlite.org/fts5.html)
-[![License](https://img.shields.io/github/license/William-php-16/VeriGreen-ops)](https://github.com/William-php-16/VeriGreen-ops)
+[![License](https://img.shields.io/github/license/William-php-16/VeriGreen-ops)](LICENSE)
 [![Docker](https://img.shields.io/badge/docker-python%3A3.12--slim-2496ED?logo=docker&logoColor=white)](Dockerfile)
 [![CI](https://img.shields.io/github/actions/workflow/status/William-php-16/VeriGreen-ops/ci.yml?branch=main&label=CI&logo=githubactions&logoColor=white)](.github/workflows/ci.yml)
 [![Security: Bandit](https://img.shields.io/badge/security-bandit-yellow?logo=python&logoColor=white)](.github/workflows/ci.yml)
@@ -188,11 +188,17 @@ docker run --rm -v "$(pwd)/data:/app/data" -v "$(pwd)/output:/app/output" verigr
 ```text
 VeriGreen-ops/
 |-- .agents/
-|   |-- rules/graphify.md
+|   |-- skills/                  # Junction/symlink to skills/
 |   `-- workflows/
 |       |-- graphify.md
 |       `-- verigreen.md
 |-- .github/workflows/ci.yml
+|-- Photo/
+|   |-- Screenshot 2026-11-26 214257.png
+|   |-- Screenshot 2026-11-26 214621.png
+|   |-- Screenshot 2026-11-26 214635.png
+|   |-- Screenshot 2026-11-26 220814.png
+|   `-- Screenshot 2026-11-26 220828.png
 |-- config/
 |   |-- examples/
 |   |   |-- acm_dutch_green_claims.yaml
@@ -223,6 +229,7 @@ VeriGreen-ops/
 |   |-- crawl/SKILL.md
 |   |-- discover/SKILL.md
 |   |-- draft/SKILL.md
+|   |-- draft_rulebook/SKILL.md
 |   |-- export/SKILL.md
 |   |-- greenwash/SKILL.md
 |   |-- humanize/SKILL.md
@@ -243,6 +250,7 @@ VeriGreen-ops/
 |-- DATA_CONTRACT.md
 |-- Dockerfile
 |-- GEMINI.md
+|-- LICENSE
 |-- README.md
 `-- requirements.txt
 ```
@@ -299,7 +307,7 @@ python scripts/create_sample_data.py
 
 ### Agent Workflow & Unified `/verigreen` Commands
 
-Configured in [`.agent/workflows/verigreen.md`](.agent/workflows/verigreen.md), [`.agents/workflows/verigreen.md`](.agents/workflows/verigreen.md), and [`skills/verigreen/SKILL.md`](skills/verigreen/SKILL.md) (with internal modules in `skills/`):
+Configured in [`.agents/workflows/verigreen.md`](.agents/workflows/verigreen.md) and [`skills/verigreen/SKILL.md`](skills/verigreen/SKILL.md) (with internal modules in `skills/`):
 
 | Command | Action |
 | :--- | :--- |
@@ -331,3 +339,9 @@ Add custom audit checks or regulatory rulebooks without editing `src/`:
 ```bash
 .venv/bin/python -m pytest -v
 ```
+
+---
+
+## License
+
+Licensed under the [MIT License](LICENSE).
