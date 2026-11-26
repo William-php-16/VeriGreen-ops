@@ -25,7 +25,7 @@ rules:
     regulation: "EU Omnibus I Voluntary SME Standard (VSME, Delegated Regulation (EU) 2026/1560)"
     framework: "VS"
     rulebooks:
-      - "config/esrs_standards.yaml"
+      - "config/examples/vsme_value_chain_shield.yaml"
     notes: "Undertakings with <=1,000 employees fall under the VSME value-chain protection cap unless opted into ESRS_2026."
 
   - rule_id: "EU-AGRIFOOD-EUDR"
@@ -40,16 +40,27 @@ rules:
       - "config/examples/rspo_ispo_palm_sustainability.yaml"
     notes: "Agri-food and forest-risk commodity operators require geolocation traceability, FLAG/Scope 3 accounting, and deforestation-free proof."
 
-  - rule_id: "NL-ACM-GREEN-CLAIMS"
-    country_region: ["NL", "EU"]
+  - rule_id: "EU-EMPCO-GREEN-CLAIMS"
+    country_region: ["EU"]
     min_employees: 0
     max_employees: null
     sector: ["all"]
-    regulation: "NL ACM Leidraad Duurzaamheidsclaims & EU Empowering Consumers Directive"
+    regulation: "EU Empowering Consumers for the Green Transition Directive (Directive (EU) 2024/825)"
     framework: "ESRS_2026"
     rulebooks:
       - "config/esrs_standards.yaml"
-    notes: "Enforced on all B2C/B2B sustainability claims via /greenwash; prohibits vague 'carbon neutral' or offset-only assertions without gross emissions and LCA boundaries."
+    notes: "Applies across all EU member states; prohibits generic environmental claims and offset-based climate neutrality claims without verified substantiation."
+
+  - rule_id: "NL-ACM-GREEN-CLAIMS"
+    country_region: ["NL"]
+    min_employees: 0
+    max_employees: null
+    sector: ["all"]
+    regulation: "NL ACM Guidelines on Sustainability Claims (ACM 5 Rules of Thumb)"
+    framework: "NL_ACM_CLAIMS"
+    rulebooks:
+      - "config/examples/acm_dutch_green_claims.yaml"
+    notes: "Triggered only when country is NL; enforces ACM 5 Rules of Thumb on B2C/B2B claims via /greenwash."
 
   - rule_id: "EU-FINANCE-SFDR"
     country_region: ["NL", "EU"]

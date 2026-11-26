@@ -3,6 +3,7 @@ import hashlib
 import json
 import re
 import sqlite3
+import sys
 from pathlib import Path
 import yaml
 
@@ -90,6 +91,8 @@ def init_db(db_path: Path = DEFAULT_DB_PATH, reset: bool = False) -> None:
                 country TEXT NOT NULL DEFAULT '',
                 sector TEXT NOT NULL DEFAULT '',
                 employee_count INTEGER,
+                consolidation_approach TEXT NOT NULL DEFAULT '',
+                boundary_exclusions TEXT NOT NULL DEFAULT '[]',
                 detected_frameworks TEXT NOT NULL DEFAULT '[]',
                 applicable_regulations TEXT NOT NULL DEFAULT '[]',
                 crosswalk_summary TEXT NOT NULL DEFAULT '',
@@ -127,6 +130,22 @@ def init_db(db_path: Path = DEFAULT_DB_PATH, reset: bool = False) -> None:
             WHERE page_id NOT IN (SELECT rowid FROM pages_fts);
             """
         )
+        _ensure_profile_columns(conn)
+
+
+def _ensure_profile_columns(conn: sqlite3.Connection) -> None:
+    """Add newer company_profiles columns on pre-existing SQLite databases."""
+    existing_cols = {
+        row["name"] for row in conn.execute("PRAGMA table_info(company_profiles);").fetchall()
+    }
+    if "consolidation_approach" not in existing_cols:
+        conn.execute(
+            "ALTER TABLE company_profiles ADD COLUMN consolidation_approach TEXT NOT NULL DEFAULT '';"
+        )
+    if "boundary_exclusions" not in existing_cols:
+        conn.execute(
+            "ALTER TABLE company_profiles ADD COLUMN boundary_exclusions TEXT NOT NULL DEFAULT '[]';"
+        )
 
 
 def seed_yaml(yaml_path: Path = DEFAULT_YAML_PATH, db_path: Path = DEFAULT_DB_PATH) -> int:
@@ -136,12 +155,16 @@ def seed_yaml(yaml_path: Path = DEFAULT_YAML_PATH, db_path: Path = DEFAULT_DB_PA
     with open(yaml_path, "r", encoding="utf-8") as f:
         payload = yaml.safe_load(f)
 
-    default_fw = payload.get("framework", "ESRS_2026")
+    active = payload.get("active_frameworks")
+    default_fw = payload.get("framework") or (
+        active[0] if isinstance(active, list) and active else "ESRS_2026"
+    )
     reqs = payload.get("requirements", [])
     count = 0
 
     with get_connection(db_path) as conn:
         for r in reqs:
+            req_text = (r.get("requirement_text") or r.get("mandatory_datapoint") or "").strip()
             conn.execute(
                 """
                 INSERT INTO esrs_requirements (
@@ -161,13 +184,84 @@ def seed_yaml(yaml_path: Path = DEFAULT_YAML_PATH, db_path: Path = DEFAULT_DB_PA
                     r.get("framework", default_fw),
                     r["standard"],
                     r["topic"],
-                    r["requirement_text"].strip(),
+                    req_text,
                     int(bool(r.get("is_quantitative", False))),
                     int(bool(r.get("mandatory", True))),
                 ),
             )
             count += 1
     return count
+
+
+def validate_rulebook(yaml_path: Path) -> int:
+    """Validate a YAML rulebook structure and return the number of requirements."""
+    if not yaml_path.exists():
+        raise ValueError(f"Rulebook file not found: {yaml_path}")
+
+    with open(yaml_path, "r", encoding="utf-8") as f:
+        payload = yaml.safe_load(f)
+
+    if not isinstance(payload, dict):
+        raise ValueError("Top-level YAML value must be a mapping")
+
+    fw = payload.get("framework")
+    active = payload.get("active_frameworks")
+    has_fw = isinstance(fw, str) and bool(fw.strip())
+    has_active = isinstance(active, list) and len(active) > 0 and all(
+        isinstance(item, str) and bool(item.strip()) for item in active
+    )
+    if not (has_fw or has_active):
+        raise ValueError(
+            "Missing or invalid top-level 'framework' (non-empty str) or 'active_frameworks' (non-empty list[str])"
+        )
+
+    reqs = payload.get("requirements")
+    if not isinstance(reqs, list) or len(reqs) == 0:
+        raise ValueError("Top-level 'requirements' must be a non-empty list")
+
+    seen_ids: set[str] = set()
+    for idx, req in enumerate(reqs):
+        if not isinstance(req, dict):
+            raise ValueError(f"requirements[{idx}] must be a mapping")
+        for field in ("req_id", "standard", "topic"):
+            val = req.get(field)
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"Missing or invalid '{field}' (non-empty str) in requirements[{idx}]")
+
+        req_id = req["req_id"].strip()
+        if req_id in seen_ids:
+            raise ValueError(f"Duplicate req_id '{req_id}' in requirements[{idx}]")
+        seen_ids.add(req_id)
+
+        datapoint = req.get("mandatory_datapoint")
+        req_text = req.get("requirement_text")
+        has_dp = isinstance(datapoint, str) and bool(datapoint.strip())
+        has_rt = isinstance(req_text, str) and bool(req_text.strip())
+        if not (has_dp or has_rt):
+            raise ValueError(
+                f"Missing or invalid 'mandatory_datapoint' or 'requirement_text' (non-empty str) in requirements[{idx}]"
+            )
+
+        keywords = req.get("keywords")
+        if (
+            not isinstance(keywords, list)
+            or len(keywords) == 0
+            or not all(isinstance(kw, str) and bool(kw.strip()) for kw in keywords)
+        ):
+            raise ValueError(
+                f"Missing or invalid 'keywords' (non-empty list of strings) in requirements[{idx}]"
+            )
+
+    return len(reqs)
+
+
+def cmd_validate_rulebook(yaml_path: Path) -> None:
+    try:
+        count = validate_rulebook(yaml_path)
+    except (ValueError, yaml.YAMLError) as exc:
+        print(f"INVALID: {exc}", file=sys.stderr)
+        sys.exit(1)
+    print(f"VALID: {count} requirements")
 
 
 def compute_file_hash(file_path: Path) -> str:
@@ -427,29 +521,107 @@ def _json_field(val: object, default: str = "[]") -> str:
     return json.dumps(val) if isinstance(val, (list, dict)) else str(val)
 
 
-def cmd_save_profile(db_path: Path, raw_json: str) -> None:
+def _parse_str_list(raw: str | None) -> list[str]:
+    if not raw:
+        return []
+    try:
+        parsed = json.loads(raw)
+        items = parsed if isinstance(parsed, list) else [parsed]
+    except json.JSONDecodeError:
+        items = [raw]
+    return [str(item).strip() for item in items if str(item).strip()]
+
+
+def _merge_unique_list(existing_json: str | None, incoming_json: str | None) -> str:
+    merged: list[str] = []
+    seen: set[str] = set()
+    for item in _parse_str_list(existing_json) + _parse_str_list(incoming_json):
+        key = item.casefold()
+        if key not in seen:
+            seen.add(key)
+            merged.append(item)
+    return json.dumps(merged)
+
+
+def _merge_scalar(existing_val: str | None, incoming_val: object, overwrite: bool) -> str:
+    inc = str(incoming_val or "").strip()
+    if inc.casefold() == "unknown":
+        inc = ""
+    if overwrite:
+        return inc
+    return inc or (existing_val or "").strip()
+
+
+def cmd_save_profile(db_path: Path, raw_json: str, overwrite: bool = False) -> None:
     data = json.loads(raw_json)
     company_name = data["company_name"].strip()
     if not company_name:
         raise ValueError("company_name must not be empty")
     company_id = data.get("company_id") or re.sub(r"[^a-z0-9]+", "_", company_name.lower()).strip("_") or "company"
     emp = data.get("employee_count")
-    employee_count = int(emp) if emp is not None else None
+    incoming_emp = int(emp) if emp is not None else None
 
     with get_connection(db_path) as conn:
+        _ensure_profile_columns(conn)
+        existing = conn.execute(
+            "SELECT * FROM company_profiles WHERE company_id = ?;",
+            (company_id,),
+        ).fetchone()
+
+        if existing and not overwrite:
+            employee_count = (
+                incoming_emp
+                if incoming_emp is not None and incoming_emp > 0
+                else existing["employee_count"]
+            )
+            source_url = _merge_scalar(existing["source_url"], data.get("source_url"), False)
+            country = _merge_scalar(existing["country"], data.get("country"), False)
+            sector = _merge_scalar(existing["sector"], data.get("sector"), False)
+            consolidation_approach = _merge_scalar(
+                existing["consolidation_approach"], data.get("consolidation_approach"), False
+            )
+            boundary_exclusions = _merge_unique_list(
+                existing["boundary_exclusions"], _json_field(data.get("boundary_exclusions"), "")
+            )
+            detected_frameworks = _merge_unique_list(
+                existing["detected_frameworks"], _json_field(data.get("detected_frameworks"), "")
+            )
+            applicable_regulations = _merge_unique_list(
+                existing["applicable_regulations"], _json_field(data.get("applicable_regulations"), "")
+            )
+            old_summary = (existing["crosswalk_summary"] or "").strip()
+            new_summary = str(data.get("crosswalk_summary") or "").strip()
+            if new_summary and new_summary not in old_summary:
+                crosswalk_summary = f"{old_summary}\n{new_summary}".strip() if old_summary else new_summary
+            else:
+                crosswalk_summary = old_summary
+        else:
+            employee_count = incoming_emp if incoming_emp is not None and incoming_emp > 0 else None
+            source_url = _merge_scalar(None, data.get("source_url"), True)
+            country = _merge_scalar(None, data.get("country"), True)
+            sector = _merge_scalar(None, data.get("sector"), True)
+            consolidation_approach = _merge_scalar(None, data.get("consolidation_approach"), True)
+            boundary_exclusions = _merge_unique_list(None, _json_field(data.get("boundary_exclusions"), ""))
+            detected_frameworks = _merge_unique_list(None, _json_field(data.get("detected_frameworks"), ""))
+            applicable_regulations = _merge_unique_list(None, _json_field(data.get("applicable_regulations"), ""))
+            crosswalk_summary = str(data.get("crosswalk_summary") or "").strip()
+
         conn.execute(
             """
             INSERT INTO company_profiles (
                 company_id, company_name, source_url, country, sector,
-                employee_count, detected_frameworks, applicable_regulations, crosswalk_summary
+                employee_count, consolidation_approach, boundary_exclusions,
+                detected_frameworks, applicable_regulations, crosswalk_summary
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(company_id) DO UPDATE SET
                 company_name = excluded.company_name,
                 source_url = excluded.source_url,
                 country = excluded.country,
                 sector = excluded.sector,
                 employee_count = excluded.employee_count,
+                consolidation_approach = excluded.consolidation_approach,
+                boundary_exclusions = excluded.boundary_exclusions,
                 detected_frameworks = excluded.detected_frameworks,
                 applicable_regulations = excluded.applicable_regulations,
                 crosswalk_summary = excluded.crosswalk_summary,
@@ -458,13 +630,15 @@ def cmd_save_profile(db_path: Path, raw_json: str) -> None:
             (
                 company_id,
                 company_name,
-                data.get("source_url", ""),
-                data.get("country", ""),
-                data.get("sector", ""),
+                source_url,
+                country,
+                sector,
                 employee_count,
-                _json_field(data.get("detected_frameworks")),
-                _json_field(data.get("applicable_regulations")),
-                data.get("crosswalk_summary", ""),
+                consolidation_approach,
+                boundary_exclusions,
+                detected_frameworks,
+                applicable_regulations,
+                crosswalk_summary,
             ),
         )
     print(f"Saved company profile for {company_id}.")
@@ -496,6 +670,9 @@ def main() -> None:
     p_seed = sub.add_parser("seed", help="Upsert an additional YAML rulebook without wiping existing assessments")
     p_seed.add_argument("--yaml", type=Path, required=True, help="Path to YAML rulebook file")
 
+    p_val = sub.add_parser("validate-rulebook", help="Validate a YAML rulebook schema")
+    p_val.add_argument("--yaml", type=Path, required=True, help="Path to YAML rulebook file")
+
     sub.add_parser("status", help="Show table row counts")
     p_unassessed = sub.add_parser("list-unassessed", help="List unassessed (req_id, doc_id) pairs")
     p_unassessed.add_argument("--framework", default=None, help="Optional framework filter (e.g. ESRS_2026, VS, EU_SFDR_PAI)")
@@ -522,6 +699,11 @@ def main() -> None:
 
     p_save_prof = sub.add_parser("save-profile", help="Upsert a discovered company profile JSON record")
     p_save_prof.add_argument("--json", required=True)
+    p_save_prof.add_argument(
+        "--overwrite",
+        action="store_true",
+        help="Replace existing profile fields instead of merging lists and preserving non-empty scalars",
+    )
 
     p_show_prof = sub.add_parser("show-profile", help="Show saved company profile(s)")
     p_show_prof.add_argument("--company-id", default=None)
@@ -536,6 +718,8 @@ def main() -> None:
         init_db(args.db, reset=False)
         count = seed_yaml(args.yaml, args.db)
         print(f"Seeded {count} requirements from {args.yaml} into {args.db}.")
+    elif args.command == "validate-rulebook":
+        cmd_validate_rulebook(args.yaml)
     elif args.command == "status":
         cmd_status(args.db)
     elif args.command == "list-unassessed":
@@ -553,7 +737,7 @@ def main() -> None:
     elif args.command == "approve":
         cmd_approve(args.db, args.req_id, args.notes)
     elif args.command == "save-profile":
-        cmd_save_profile(args.db, args.json)
+        cmd_save_profile(args.db, args.json, overwrite=args.overwrite)
     elif args.command == "show-profile":
         cmd_show_profile(args.db, company_id=args.company_id)
 

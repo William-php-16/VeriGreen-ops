@@ -1,189 +1,300 @@
 # VeriGreen-ops
 
-**Open-Source, Local-First Native AI CLI Agent for CSRD (Revised ESRS 2026) & Voluntary SME Standard (VS) Readiness Auditing**
+Local-first CLI agent and deterministic SQLite pipeline for CSRD (Revised ESRS 2026) and Voluntary SME Standard (VS) readiness auditing.
 
-`VeriGreen-ops` turns your existing terminal AI coding CLI (**Claude Code**, **Gemini CLI**, **Codex CLI**, or **Antigravity IDE**) into a zero-infrastructure sustainability auditing and assurance-readiness agent backed by deterministic Python (`pymupdf`, `pandas`, `fpdf2`, `rich`) and local SQLite (`data/audit_pipeline.db`).
+[![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/downloads/)
+[![SQLite FTS5](https://img.shields.io/badge/SQLite-FTS5-003B57?logo=sqlite&logoColor=white)](https://www.sqlite.org/fts5.html)
+[![License](https://img.shields.io/github/license/William-php-16/VeriGreen-ops)](https://github.com/William-php-16/VeriGreen-ops)
+[![Docker](https://img.shields.io/badge/docker-python%3A3.12--slim-2496ED?logo=docker&logoColor=white)](Dockerfile)
+[![CI](https://img.shields.io/github/actions/workflow/status/William-php-16/VeriGreen-ops/ci.yml?branch=main&label=CI&logo=githubactions&logoColor=white)](.github/workflows/ci.yml)
+[![Security: Bandit](https://img.shields.io/badge/security-bandit-yellow?logo=python&logoColor=white)](.github/workflows/ci.yml)
 
-- **Zero External SaaS / Zero Extra LLM API Keys:** Corporate PDFs, emissions CSVs, and draft disclosures never leave your local machine.
-- **Strict Anti-Hallucination Provenance:** Every readiness score `> 1.0` requires an exact verbatim quote and 1-indexed page number; every drafted sentence must end with `[Source: <filename>, p.<page_number>]` or an explicit `[DATA GAP: <action required>]` tag.
-- **Human-in-the-Loop (HITL) Export Gate:** `src/report_builder.py` refuses to render the final A4 PDF Assurance Pack (`exit 1`) whenever any draft in `disclosure_drafts` has `human_approved = 0` (unless `--approved-only` is explicitly passed).
+`VeriGreen-ops` pairs deterministic Python scripts (`pymupdf`, `pandas`, `fpdf2`, `rich`, `httpx`) and local SQLite (`data/audit_pipeline.db`) with modular Agent Skills (`skills/`) for Antigravity (`agy`), Claude Code, Gemini CLI, and Codex CLI.
+
+![VeriGreen-ops Terminal Dashboard](docs/assets/dashboard.png)
+
+*Terminal readiness dashboard rendered by `python src/dashboard.py`, showing pipeline counts, human approval progress, requirement scores, and EU Green Claims alerts.*
 
 ---
 
-## Architecture Overview
+## Architecture
 
-```text
-  Public ESG Portals             User Drop Zone                 User Rulebook & Profile
-  config/portals.yaml / --url    data/raw_docs/ (*.pdf, *.csv)  config/esrs_standards.yaml
-         |                              |                       config/company_context.md
-         v                              v                                  |
-  +------------------+          +------------------+              +------------------+
-  |  src/crawler.py  | -------> | src/ingestor.py  |              |    src/db.py     |
-  | httpx + bs4 link |          | SHA-256 dedup,   | -----------> | SQLite Schema &  |
-  | discovery        |          | PyMuPDF & Pandas |              | Audit State CRUD |
-  +------------------+          +------------------+              +------------------+
-                                                                            ^
-                                                                            | (invoked via .venv)
-  +-------------------------------------------------------------------------+------------------+
-  | Native CLI Agent Brain (AGENTS.md / CLAUDE.md / GEMINI.md)                                 |
-  | Modular Skills: skills/<name>/SKILL.md                                                     |
-  |   /crawl -> /ingest -> /assess -> /verify -> /greenwash -> /draft -> /approve -> /export   |
-  +-------------------------------------------------------------------------+------------------+
-                                                                            |
-                                                                            v
-                                                                  +--------------------+
-                                                                  | src/report_builder |
-                                                                  | HITL Gate + fpdf2  |
-                                                                  +--------------------+
-                                                                            |
-                                                                            v
-                                                             output/verigreen_assurance_pack.pdf
+The pipeline separates deterministic data acquisition, indexing, and export gates from AI skill execution so documents stay local and LLM calls operate only on pre-filtered snippets.
+
+```mermaid
+flowchart TD
+    subgraph DET_IN["Deterministic Layer (Zero LLM Tokens)"]
+        A["Web/PDF Input"] --> B["crawler.py (SSRF/Size Guard)"]
+        B --> C["SQLite + FTS5 Pre-Filter"]
+    end
+
+    subgraph AI_LAYER["AI Agent Skills Layer"]
+        D["discover (Jurisdiction Cross-Walk)"] --> E["assess + verify + greenwash"]
+        E --> F["draft + humanize"]
+    end
+
+    subgraph DET_OUT["Deterministic Gate & Export (Zero LLM Tokens)"]
+        G["Human Sign-Off Gate"] --> H["PDF Report Export"]
+    end
+
+    C --> D
+    F --> G
+
+    classDef det fill:#eef6f2,stroke:#1b5e3a,color:#112a1d
+    classDef agent fill:#eff4fb,stroke:#2563eb,color:#0f294a
+    class A,B,C,G,H det
+    class D,E,F agent
 ```
 
-### Repository Layout
+---
 
-| Path | Role |
-| :--- | :--- |
-| `AGENTS.md`, `CLAUDE.md`, `GEMINI.md` | Cross-CLI agent brain enforcing citation, numeric tolerance, and HITL rules |
-| `DATA_CONTRACT.md` | Authoritative SQLite schema, 1.0–5.0 rubric, and CLI contract |
-| `config/esrs_standards.yaml` | User-editable regulatory rulebook (`ESRS_2026` and `VS` modules) |
-| `config/portals.yaml` | User-editable corporate sustainability portal URLs for `src/crawler.py --batch` |
-| `config/company_context.md` | Organization profile, consolidation boundaries, and fiscal year |
-| `src/crawler.py` | Deterministic ESG report crawler (`httpx` + `beautifulsoup4`) feeding `ingest_file()` |
-| `src/ingestor.py` | Deterministic PDF/CSV ingestor with SHA-256 deduplication |
-| `src/db.py` | SQLite schema initialization, seeding, assessment, draft, and approval CLI |
-| `src/report_builder.py` | Pure-Python `fpdf2` A4 PDF Assurance Pack renderer with HITL gate |
-| `skills/<name>/SKILL.md` | Modular Agent Skills exposed to `.claude/skills` and `.gemini/skills` |
-| `scripts/` | Windows/Unix setup scripts and synthetic benchmark generator (`create_sample_data.py`) |
+## Why VeriGreen-ops
+
+| Audit Stage | Dump Full PDF Into LLM | VeriGreen-ops |
+| :--- | :--- | :--- |
+| Document Retrieval | Sends every page of every PDF into prompt context | Queries SQLite `pages_fts` (`src/db.py search-pages --limit 5`) for top-ranked pages only |
+| Greenwashing Screen | Runs LLM inference across full reports | Runs regex pre-filtering (`src/db.py find-claims`) first; skips LLM screening when zero trigger terms match |
+| Quantitative Math | Relies on LLM mental math over prose and tables | Aggregates CSVs with `pandas` in `src/ingestor.py` and enforces a 1% relative tolerance check in `/verify` |
+| Provenance & Sign-Off | Outputs unverified summaries with no export lock | Requires exact page citations, `[DATA GAP]` tags, and `human_approved = 1` before `src/report_builder.py` exports |
+
+---
+
+## Supported Regulatory Rulebooks
+
+| Rulebook File | Framework | Target Scope | CLI Seed Command |
+| :--- | :--- | :--- | :--- |
+| `config/esrs_standards.yaml` | `ESRS_2026`, `VS` | Revised ESRS 2026 (`E1`, `E4`, `E5`, `S2`, `G1`) and Voluntary SME (`VS-B3`) (9 requirements) | `python src/db.py init` |
+| `config/examples/csddd_value_chain_due_diligence.yaml` | `CSDDD_2024` | EU Corporate Sustainability Due Diligence Directive (Art. 5, 7, 8, 10, 11, 12, 14, 15, 16, 22) | `python src/db.py seed --yaml config/examples/csddd_value_chain_due_diligence.yaml` |
+| `config/examples/ghg_scope3_agrifood.yaml` | `GHG_FLAG_AGRIFOOD` | GHG Protocol Scope 3 Cat. 1, Land Sector & FLAG, and SBTi FLAG targets | `python src/db.py seed --yaml config/examples/ghg_scope3_agrifood.yaml` |
+| `config/examples/rspo_ispo_palm_sustainability.yaml` | `PALM_RSPO_ISPO` | RSPO P&C, ISPO, NDPE, FPIC, peatland, and mill-to-plantation traceability | `python src/db.py seed --yaml config/examples/rspo_ispo_palm_sustainability.yaml` |
+| `config/examples/sfdr_impact_finance_pai.yaml` | `EU_SFDR_PAI` | EU SFDR RTS Principal Adverse Impact indicators (`PAI 1` through `PAI 11`) | `python src/db.py seed --yaml config/examples/sfdr_impact_finance_pai.yaml` |
+| `config/examples/vsme_value_chain_shield.yaml` | `VS` | EU Omnibus I Voluntary SME Standard (`VSME`) and value-chain protection cap | `python src/db.py seed --yaml config/examples/vsme_value_chain_shield.yaml` |
+| `config/examples/acm_dutch_green_claims.yaml` | `NL_ACM_CLAIMS` | Netherlands ACM Guidelines on Sustainability Claims (ACM 5 Rules of Thumb) | `python src/db.py seed --yaml config/examples/acm_dutch_green_claims.yaml` |
+
+Two supporting YAML files live in `config/` outside the requirement rulebooks:
+- `config/jurisdiction_matrix.yaml`: Maps `(country_region, employee_count, sector)` to mandatory rulebooks and crosswalk blind spots (`GRI`, `ISO 14001`, `TCFD`, `RSPO`, `SBTi`) for `/discover`.
+- `config/portals.yaml`: Lists target sustainability portal URLs for `python src/crawler.py --batch`.
 
 ---
 
 ## Quickstart
 
-### 1. Windows (PowerShell)
+### Path A: Local Setup with Antigravity (`agy`) / CLI
 
-```powershell
-git clone <your-fork-or-repo-url> VeriGreen-ops
-cd VeriGreen-ops
+Clone the repository, create `.venv`, install Python dependencies, and initialize SQLite:
 
-# Creates .venv, installs requirements.txt, and links .claude\skills & .gemini\skills -> skills\
-powershell -ExecutionPolicy Bypass -File scripts\setup_windows.ps1
-
-# Optional: generate synthetic sample PDF & CSV in data/sample/
-.\.venv\Scripts\python.exe scripts\create_sample_data.py
-
-# Initialize SQLite database & seed config/esrs_standards.yaml
-.\.venv\Scripts\python.exe src\db.py init
-
-# Launch your terminal AI CLI (Claude Code or Gemini CLI)
-claude
-# or: gemini
-```
-
-### 2. macOS / Linux (Bash)
+**macOS / Linux (Bash):**
 
 ```bash
-git clone <your-fork-or-repo-url> VeriGreen-ops
+git clone https://github.com/William-php-16/VeriGreen-ops.git
 cd VeriGreen-ops
-
-# Creates .venv, installs requirements.txt, and symlinks .claude/skills & .gemini/skills -> ../skills
-bash scripts/setup_unix.sh
-
-# Optional: generate synthetic sample PDF & CSV in data/sample/
-.venv/bin/python scripts/create_sample_data.py
-
-# Initialize SQLite database & seed config/esrs_standards.yaml
+python3 -m venv .venv
+.venv/bin/python -m pip install --upgrade pip
+.venv/bin/python -m pip install -r requirements.txt
 .venv/bin/python src/db.py init
-
-# Launch your terminal AI CLI
-claude
-# or: gemini
 ```
 
----
-
-## Audit Workflow (Slash Commands)
-
-Inside `claude` or `gemini`, run the modular skills in sequence:
-
-| Command | Skill File | Purpose |
-| :--- | :--- | :--- |
-| `/crawl` | [`skills/crawl/SKILL.md`](skills/crawl/SKILL.md) | Discovers & downloads `.pdf`/`.csv` reports from URLs or `config/portals.yaml` and deduplicates via `ingest_file()` |
-| `/ingest` | [`skills/ingest/SKILL.md`](skills/ingest/SKILL.md) | SHA-256 deduplication, page-by-page PDF indexing, and CSV-to-Markdown conversion |
-| `/assess` | [`skills/assess/SKILL.md`](skills/assess/SKILL.md) | 1.0–5.0 readiness scoring with exact verbatim quotes and 1-indexed page numbers |
-| `/verify` | [`skills/verify/SKILL.md`](skills/verify/SKILL.md) | Reconciles quantitative PDF claims against CSV tables (1% relative tolerance) |
-| `/greenwash` | [`skills/greenwash/SKILL.md`](skills/greenwash/SKILL.md) | Screens quotes against EU Green Claims substantiation rules |
-| `/draft` | [`skills/draft/SKILL.md`](skills/draft/SKILL.md) | Compiles ESRS/VS prose with `[Source: file, p.X]` and `[DATA GAP: ...]` tags |
-| `/approve` | [`skills/approve/SKILL.md`](skills/approve/SKILL.md) | Displays drafts and warnings in terminal for explicit human sign-off (`human_approved = 1`) |
-| `/export` | [`skills/export/SKILL.md`](skills/export/SKILL.md) | Renders the 3-section A4 PDF Assurance Pack via `src/report_builder.py` |
-| `/status` | [`skills/status/SKILL.md`](skills/status/SKILL.md) | Prints SQLite pipeline counts and readiness state |
-
-Want to add a custom check (e.g., `/eudr-check` or `/cbam-check`)? Follow [`skills/ADDING_A_SKILL.md`](skills/ADDING_A_SKILL.md).
-
-### Web Portal Crawling (`src/crawler.py` & `config/portals.yaml`)
-
-Fetch public corporate sustainability PDFs/CSVs directly into `data/raw_docs/` with automatic ESG keyword filtering and SHA-256 deduplication:
+**Windows (PowerShell):**
 
 ```powershell
-# Single sustainability portal or direct PDF/CSV URL
-.\.venv\Scripts\python.exe src\crawler.py --url "https://example.com/sustainability-reports"
+git clone https://github.com/William-php-16/VeriGreen-ops.git
+cd VeriGreen-ops
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install --upgrade pip
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+.\.venv\Scripts\python.exe src\db.py init
+```
 
-# Batch crawl all enabled portals in config/portals.yaml
-.\.venv\Scripts\python.exe src\crawler.py --batch
+*(Optional: run `bash scripts/setup_unix.sh` or `powershell -ExecutionPolicy Bypass -File scripts\setup_windows.ps1` to automate `.venv` creation and link `.claude/skills` and `.gemini/skills` to `skills/`.)*
 
-# Include all .pdf/.csv links on a page without ESG keyword filtering
-.\.venv\Scripts\python.exe src\crawler.py --url "https://example.com/reports" --all-files
+Run the terminal dashboard directly or launch the agent pipeline:
+
+```bash
+# View pipeline status and readiness matrix
+.venv/bin/python src/dashboard.py
+
+# Or on Windows:
+# .\.venv\Scripts\python.exe src\dashboard.py
+```
+
+Inside your CLI session (`agy`, `claude`, or `gemini`), run the end-to-end workflow against a public sustainability portal:
+
+```text
+/verigreen https://example.com/sustainability
+```
+
+To test locally without network access, generate and ingest the synthetic fixtures in `data/sample/`:
+
+```bash
+.venv/bin/python scripts/create_sample_data.py
+.venv/bin/python src/ingestor.py --dir data/sample
+.venv/bin/python src/dashboard.py
+```
+
+### Path B: One-Command Docker Run
+
+The `Dockerfile` builds on `python:3.12-slim` as a non-root `verigreen` user and defaults to `python src/dashboard.py`. Mount `data/` and `output/` so SQLite state, downloaded reports, and rendered PDFs persist on the host:
+
+```bash
+docker build -t verigreen-ops .
+docker run --rm -v "$(pwd)/data:/app/data" -v "$(pwd)/output:/app/output" verigreen-ops
+```
+
+Initialize the database or run another CLI command inside the same container image:
+
+```bash
+docker run --rm -v "$(pwd)/data:/app/data" -v "$(pwd)/output:/app/output" verigreen-ops python src/db.py init
 ```
 
 ---
 
-## Sample Terminal Output (`data/sample/`)
+## Security & Governance Highlights
 
-Running the deterministic pipeline on the synthetic benchmark corpus (`sample_sustainability_report.pdf` + `sample_emissions.csv`):
+- **SSRF, Redirect, Path-Traversal & 50 MB Download Guards (`src/crawler.py`):** `validate_url()` permits only `http`/`https` URLs and rejects private, loopback, link-local, multicast, reserved, and unspecified IP addresses on initial requests and across up to 5 redirect hops (`_get_validated()`). `sanitize_filename()` and `_assert_within_dir()` block path traversal, and `download_file()` aborts streams larger than 50 MB (`MAX_BYTES = 50 * 1024 * 1024`) or `text/html` error pages.
+- **Indirect Prompt Injection Delimiters (`src/db.py`, `skills/00_system_guardrails.md`):** `get-pages`, `search-pages`, and `find-claims` wrap extracted document text inside `<untrusted_document_content>...</untrusted_document_content>` tags so agents treat external text strictly as passive data.
+- **Safe Parsing & Parameterized SQL (`src/db.py`, `src/crawler.py`):** Configuration files load via `yaml.safe_load()`, and all SQLite reads and writes use parameterized `?` queries with `PRAGMA foreign_keys = ON` and WAL mode.
+- **Human-in-the-Loop (HITL) Export Gate (`src/db.py`, `src/report_builder.py`):** `save-draft` always resets `human_approved = 0`. `src/report_builder.py` exits with code `1` whenever any draft remains unapproved unless `--approved-only` is passed.
+- **Automated CI Checks (`.github/workflows/ci.yml`):** Pushes and pull requests to `main` run `python -m pytest -v`, `bandit -r src/ -ll`, and `pip-audit -r requirements.txt` on Python 3.12.
+
+---
+
+## Deep Dives
+
+<details>
+<summary>Repository Layout</summary>
 
 ```text
-> .\.venv\Scripts\python.exe src\db.py init
-Initialized data\audit_pipeline.db and seeded 9 requirements.
-
-> .\.venv\Scripts\python.exe src\ingestor.py --dir data\sample
-[INGESTED] sample_emissions.csv -> doc_id=sample_emissions_acdc2533 (1 pages)
-[INGESTED] sample_sustainability_report.pdf -> doc_id=sample_sustainability_report_239426d0 (3 pages)
-
-> .\.venv\Scripts\python.exe src\ingestor.py --dir data\sample
-[SKIPPED]  sample_emissions.csv (already ingested as sample_emissions_acdc2533)
-[SKIPPED]  sample_sustainability_report.pdf (already ingested as sample_sustainability_report_239426d0)
-
-> .\.venv\Scripts\python.exe src\report_builder.py
-EXPORT BLOCKED (HITL Gate): Unapproved drafts detected (human_approved = 0):
-  - ESRS-E1-1
-  - ESRS-E1-4
-  - ESRS-E1-6
-  - ESRS-E5-5
-  - ESRS-G1-1
-  - ESRS-S2-1
-Run /approve (or `python src/db.py approve --req-id <ID>`) before exporting, or pass --approved-only to export only approved drafts.
-
-> .\.venv\Scripts\python.exe src\db.py approve --req-id ESRS-E1-6 --notes "Reviewed citations and DATA GAP markers."
-Approved disclosure draft for ESRS-E1-6.
-
-> .\.venv\Scripts\python.exe src\report_builder.py
-Exported A4 Assurance Pack -> output\verigreen_assurance_pack.pdf (6 approved disclosures).
-
-> .\.venv\Scripts\python.exe src\db.py status
-{
-  "db_path": "data\\audit_pipeline.db",
-  "counts": {
-    "documents": 2,
-    "document_pages": 4,
-    "esrs_requirements": 9,
-    "assessments": 9,
-    "disclosure_drafts": 6
-  }
-}
+VeriGreen-ops/
+|-- .agents/
+|   |-- rules/graphify.md
+|   `-- workflows/
+|       |-- graphify.md
+|       `-- verigreen.md
+|-- .github/workflows/ci.yml
+|-- config/
+|   |-- examples/
+|   |   |-- acm_dutch_green_claims.yaml
+|   |   |-- csddd_value_chain_due_diligence.yaml
+|   |   |-- ghg_scope3_agrifood.yaml
+|   |   |-- rspo_ispo_palm_sustainability.yaml
+|   |   |-- sfdr_impact_finance_pai.yaml
+|   |   `-- vsme_value_chain_shield.yaml
+|   |-- company_context.md
+|   |-- esrs_standards.yaml
+|   |-- jurisdiction_matrix.yaml
+|   `-- portals.yaml
+|-- data/
+|   |-- raw_docs/
+|   `-- sample/
+|       |-- sample_emissions.csv
+|       `-- sample_sustainability_report.pdf
+|-- output/
+|-- scripts/
+|   |-- create_sample_data.py
+|   |-- setup_unix.sh
+|   `-- setup_windows.ps1
+|-- skills/
+|   |-- 00_system_guardrails.md
+|   |-- ADDING_A_SKILL.md
+|   |-- approve/SKILL.md
+|   |-- assess/SKILL.md
+|   |-- crawl/SKILL.md
+|   |-- discover/SKILL.md
+|   |-- draft/SKILL.md
+|   |-- export/SKILL.md
+|   |-- greenwash/SKILL.md
+|   |-- humanize/SKILL.md
+|   |-- ingest/SKILL.md
+|   |-- status/SKILL.md
+|   |-- verify/SKILL.md
+|   `-- verigreen/SKILL.md
+|-- src/
+|   |-- crawler.py
+|   |-- dashboard.py
+|   |-- db.py
+|   |-- ingestor.py
+|   `-- report_builder.py
+|-- tests/
+|   `-- test_core.py
+|-- AGENTS.md
+|-- CLAUDE.md
+|-- DATA_CONTRACT.md
+|-- Dockerfile
+|-- GEMINI.md
+|-- README.md
+`-- requirements.txt
 ```
 
-### Rendered A4 PDF Sections (`output/verigreen_assurance_pack.pdf`)
+</details>
 
-1. **Executive Readiness Matrix** — Requirement-by-requirement scores (`1.0`–`5.0`), quantitative reconciliation status (`VERIFIED` / `MISMATCH` / `N/A`), EU Green Claims status (`OK` / `FLAGGED`), and draft approval state.
-2. **Numeric & Greenwashing Audit Alerts** — Surfaces planted discrepancies (e.g., `ESRS-E1-6`: narrative claims 22% YoY Scope 1 reduction vs. 7.69% calculated from `sample_emissions.csv`) and flagged claims (e.g., `ESRS-E5-5`: `"100% carbon neutral packaging"`).
-3. **Human-Approved ESRS / VS Disclosures** — Formal prose with `[Source: <filename>, p.<page_number>]` inline citations, `[DATA GAP: ...]` remediation items, and reviewer sign-off notes.
+<details>
+<summary>Extended CLI Command Reference</summary>
+
+All scripts accept `--db <path>` (default: `data/audit_pipeline.db`).
+
+### `src/db.py`
+
+| Subcommand | Options | Purpose |
+| :--- | :--- | :--- |
+| `init` | `[--reset] [--yaml config/esrs_standards.yaml]` | Create SQLite tables, `pages_fts` FTS5 index, and seed a rulebook |
+| `seed` | `--yaml <path>` | Upsert an additional YAML rulebook without wiping existing assessments |
+| `status` | None | Print JSON table row counts |
+| `list-unassessed` | `[--framework <name>]` | List unassessed `(req_id, doc_id)` pairs |
+| `get-pages` | `--doc-id <id>` | Return extracted pages wrapped in `<untrusted_document_content>` |
+| `search-pages` | `--req-id <id> [--limit 5]` | Query `pages_fts` BM25 index for top matching pages |
+| `find-claims` | None | Scan `document_pages` with regex for greenwashing trigger terms |
+| `save-assessment` | `--json <json>` | Upsert an assessment record (`readiness_score` between `1.0` and `5.0`) |
+| `save-draft` | `--req-id <id> --file <path>` | Upsert a Markdown draft and reset `human_approved = 0` |
+| `approve` | `--req-id <id> [--notes "..."]` | Mark a disclosure draft as human-approved (`human_approved = 1`) |
+| `save-profile` | `--json <json>` | Upsert a discovered company profile into `company_profiles` |
+| `show-profile` | `[--company-id <id>]` | Print saved company profile records as JSON |
+
+### `src/crawler.py`
+
+```bash
+# Single webpage or direct PDF/CSV URL (ingests visible web text + discovered ESG files)
+python src/crawler.py --url "https://example.com/sustainability" [--dir data/raw_docs] [--all-files] [--timeout 30.0] [--max-files 25]
+
+# Batch crawl all enabled portals in config/portals.yaml
+python src/crawler.py --batch [--portals config/portals.yaml] [--dir data/raw_docs] [--all-files] [--timeout 30.0] [--max-files 25]
+```
+
+### `src/ingestor.py`, `src/dashboard.py`, `src/report_builder.py`, and `scripts/create_sample_data.py`
+
+```bash
+# Recursively ingest local PDF and CSV files with SHA-256 deduplication
+python src/ingestor.py [--dir data/raw_docs]
+
+# Render the Rich terminal readiness dashboard
+python src/dashboard.py
+
+# Render the 3-section A4 PDF Assurance Pack (blocks with exit 1 if any draft has human_approved = 0)
+python src/report_builder.py [--output output/verigreen_assurance_pack.pdf] [--approved-only]
+
+# Generate synthetic test fixtures in data/sample/
+python scripts/create_sample_data.py
+```
+
+### Agent Workflow & Slash Commands
+
+Configured in [`.agents/workflows/verigreen.md`](.agents/workflows/verigreen.md) and `skills/`:
+- `/verigreen <url>` runs the full pipeline (`crawler.py` -> `/discover` -> `/assess` -> `/verify` -> `/greenwash` -> `/draft`), then prompts for approval before export.
+- `/verigreen batch` crawls enabled entries in `config/portals.yaml` and runs `/assess`.
+- `/verigreen draft <REQ_ID>` compiles a single disclosure draft.
+- `/verigreen export` runs `src/report_builder.py`.
+- Individual stage skills: `/crawl`, `/ingest`, `/discover`, `/assess`, `/verify`, `/greenwash`, `/draft`, `/humanize`, `/approve`, `/export`, `/status`.
+
+</details>
+
+---
+
+## Contributing
+
+Add custom audit checks or regulatory rulebooks without editing `src/`:
+1. Append custom requirements to `config/esrs_standards.yaml` (or add a new YAML file under `config/examples/`) and seed it with `python src/db.py seed --yaml <path>`.
+2. Follow [`skills/ADDING_A_SKILL.md`](skills/ADDING_A_SKILL.md) to author a new `skills/<skill-name>/SKILL.md` slash command.
+3. Run the test suite before opening a pull request:
+
+```bash
+.venv/bin/python -m pytest -v
+```

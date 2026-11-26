@@ -1,0 +1,60 @@
+# VeriGreen-ops Example Regulatory Rulebook (User-Editable)
+# Aligns with EU Omnibus I Voluntary SME Standard (VSME, Delegated Regulation
+# (EU) 2026/1560) and the value-chain information protection cap.
+#
+# Seed into SQLite without wiping existing data:
+#   python src/db.py seed --yaml config/examples/vsme_value_chain_shield.yaml
+
+version: "2026.1"
+active_frameworks:
+  - VS
+
+requirements:
+  - req_id: "VS-B1-1"
+    framework: "VS"
+    standard: "VS-B1"
+    topic: "SME Basis for Preparation & Organizational Profile"
+    requirement_text: >
+      Disclose legal form, NACE sector classification, reporting period, balance
+      sheet total, annual turnover, headcount, country of primary operations,
+      and whether the VSME Basic or Comprehensive module applies.
+    keywords: ["VSME", "NACE", "turnover", "balance sheet", "headcount", "employees", "reporting period"]
+    is_quantitative: true
+    mandatory: true
+
+  - req_id: "VS-B2-1"
+    framework: "VS"
+    standard: "VS-B2"
+    topic: "Transition Practices, Policies & Future Sustainability Initiatives"
+    requirement_text: >
+      Disclose existing practices, policies, or future initiatives addressing
+      climate change, circular economy, biodiversity, workforce, or business
+      conduct, specifying whether policies are publicly available and overseen
+      by management.
+    keywords: ["practices", "policies", "initiatives", "climate", "circular economy", "workforce", "conduct"]
+    is_quantitative: false
+    mandatory: true
+
+  - req_id: "VS-B8-1"
+    framework: "VS"
+    standard: "VS-B8"
+    topic: "SME Workforce Headcount, Contract Types & Health and Safety"
+    requirement_text: >
+      Disclose total employees in headcount or FTE split by permanent versus
+      temporary contracts, gender, country, and annual work-related accident
+      rate and fatalities.
+    keywords: ["workforce", "employees", "FTE", "permanent", "temporary", "gender", "accident", "safety"]
+    is_quantitative: true
+    mandatory: true
+
+  - req_id: "VS-SHIELD-1"
+    framework: "VS"
+    standard: "EU Omnibus I VSME Cap"
+    topic: "Value-Chain Data Request Shield Compliance"
+    requirement_text: >
+      Document how CSRD-scoped customers or banks requesting value-chain ESG
+      data are answered within the Voluntary SME Standard (VSME) boundary
+      without unsubstantiated ESRS full-scope extrapolation.
+    keywords: ["value chain", "VSME", "Omnibus", "CSRD", "SME cap", "supplier"]
+    is_quantitative: false
+    mandatory: true

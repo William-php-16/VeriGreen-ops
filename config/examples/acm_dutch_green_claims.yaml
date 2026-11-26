@@ -1,0 +1,66 @@
+# VeriGreen-ops Example Regulatory Rulebook (User-Editable)
+# Aligns with Netherlands Authority for Consumers and Markets (ACM)
+# Guidelines on Sustainability Claims (ACM 5 Rules of Thumb).
+#
+# Seed into SQLite without wiping existing data:
+#   python src/db.py seed --yaml config/examples/acm_dutch_green_claims.yaml
+
+version: "2026.1"
+active_frameworks:
+  - NL_ACM_CLAIMS
+
+requirements:
+  - req_id: "ACM-RULE-1"
+    framework: "NL_ACM_CLAIMS"
+    standard: "NL ACM Rule 1"
+    topic: "Clear, Specific and Unambiguous Sustainability Claims"
+    requirement_text: >
+      Ensure every sustainability claim states clearly which product component,
+      service attribute, or company activity achieves the benefit, avoiding
+      vague blanket terms such as eco-friendly, green, or sustainable.
+    is_quantitative: false
+    mandatory: true
+
+  - req_id: "ACM-RULE-2"
+    framework: "NL_ACM_CLAIMS"
+    standard: "NL ACM Rule 2"
+    topic: "Substantiation with Current, Verifiable Facts and Evidence"
+    requirement_text: >
+      Substantiate every environmental or social claim with up-to-date,
+      verifiable evidence such as life-cycle assessment (LCA) data, third-party
+      test reports, or accredited certification records.
+    is_quantitative: true
+    mandatory: true
+
+  - req_id: "ACM-RULE-3"
+    framework: "NL_ACM_CLAIMS"
+    standard: "NL ACM Rule 3"
+    topic: "Fair and Equivalent Sustainability Comparisons"
+    requirement_text: >
+      When comparing a product or service against alternatives or prior years,
+      specify the exact baseline, functional unit, and boundary so comparisons
+      are apples-to-apples.
+    is_quantitative: true
+    mandatory: true
+
+  - req_id: "ACM-RULE-4"
+    framework: "NL_ACM_CLAIMS"
+    standard: "NL ACM Rule 4"
+    topic: "Honest Visual Labels, Logos and Packaging Marks"
+    requirement_text: >
+      Verify that sustainability logos, seals, or packaging badges reflect
+      recognized independent schemes rather than self-styled visuals that imply
+      official certification.
+    is_quantitative: false
+    mandatory: true
+
+  - req_id: "ACM-RULE-5"
+    framework: "NL_ACM_CLAIMS"
+    standard: "NL ACM Rule 5"
+    topic: "Concrete, Dated Future Ambitions and Offset Transparency"
+    requirement_text: >
+      Support future climate or circularity ambitions with a dated, measurable
+      action plan and disclose gross emissions separately from any purchased
+      carbon credits or offsets.
+    is_quantitative: true
+    mandatory: true

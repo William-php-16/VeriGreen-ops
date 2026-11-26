@@ -75,3 +75,6 @@ Before executing any audit workflow:
 1. Read `DATA_CONTRACT.md` if inspecting or calling `src/db.py`, `src/ingestor.py`, or `src/report_builder.py`.
 2. Read `config/company_context.md` to understand the reporting entity's framework scope (`ESRS_2026` vs. `VS`), fiscal year, and materiality boundaries.
 3. Verify `.venv` is used for all Python commands.
+
+## Python Execution
+Always run Python scripts using `.venv\Scripts\python.exe` (or `.venv/bin/python` on macOS/Linux) instead of bare `python` so commands work without manual virtual environment activation.

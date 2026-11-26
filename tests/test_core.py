@@ -188,7 +188,7 @@ def test_all_yaml_rulebooks_unique_and_seedable(tmp_path: Path) -> None:
             seen_req_ids[req_id] = path
             total_reqs += 1
 
-    assert len(rulebook_files) == 5
+    assert len(rulebook_files) == 7
 
     # Seed base rulebook, ingest sample doc, save an assessment, then seed all examples
     db_path = tmp_path / "test_multi_fw.db"
@@ -284,13 +284,32 @@ def test_company_profile_save_and_show(tmp_path: Path) -> None:
 
 def test_jurisdiction_matrix_parsing() -> None:
     matrix_path = REPO_ROOT / "config" / "jurisdiction_matrix.yaml"
-    matrix = yaml.safe_load(matrix_path.read_text(encoding="utf-8"))
+    raw_text = matrix_path.read_text(encoding="utf-8")
+    assert "\u2014" not in raw_text
+    matrix = yaml.safe_load(raw_text)
     assert "rules" in matrix and isinstance(matrix["rules"], list)
-    rule_ids = {r["rule_id"] for r in matrix["rules"]}
-    assert {"EU-NL-CSRD-LARGE", "EU-SME-VSME-CAP", "EU-AGRIFOOD-EUDR", "NL-ACM-GREEN-CLAIMS"}.issubset(rule_ids)
+    rules_by_id = {r["rule_id"]: r for r in matrix["rules"]}
+    assert {
+        "EU-NL-CSRD-LARGE",
+        "EU-SME-VSME-CAP",
+        "EU-AGRIFOOD-EUDR",
+        "EU-EMPCO-GREEN-CLAIMS",
+        "NL-ACM-GREEN-CLAIMS",
+    }.issubset(rules_by_id.keys())
     for rule in matrix["rules"]:
         for rb in rule["rulebooks"]:
             assert (REPO_ROOT / rb).exists(), f"Missing rulebook referenced in matrix: {rb}"
+    assert "config/examples/vsme_value_chain_shield.yaml" in rules_by_id["EU-SME-VSME-CAP"]["rulebooks"]
+    assert "config/examples/acm_dutch_green_claims.yaml" in rules_by_id["NL-ACM-GREEN-CLAIMS"]["rulebooks"]
+
+    # Non-NL EU member state (e.g. SK) routes to EU-EMPCO-GREEN-CLAIMS, not NL-ACM-GREEN-CLAIMS
+    sk_regions = {"SK", "EU"}
+    matched_for_sk = {
+        rid for rid, r in rules_by_id.items() if any(reg in sk_regions for reg in r["country_region"])
+    }
+    assert "EU-EMPCO-GREEN-CLAIMS" in matched_for_sk
+    assert "NL-ACM-GREEN-CLAIMS" not in matched_for_sk
+    assert rules_by_id["NL-ACM-GREEN-CLAIMS"]["country_region"] == ["NL"]
     assert {"GRI", "ISO 14001", "TCFD", "RSPO", "SBTi"}.issubset(matrix["crosswalks"].keys())
 
 
@@ -447,3 +466,200 @@ def test_find_claims_detects_greenwashing_on_sample(
         and c["snippet"].startswith("<untrusted_document_content>")
         for c in claims
     )
+
+
+def test_crawler_uses_browser_headers_and_handles_403(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import httpx
+    import crawler
+
+    monkeypatch.setattr(
+        crawler.socket,
+        "getaddrinfo",
+        lambda host, port, *args, **kwargs: [
+            (crawler.socket.AF_INET, crawler.socket.SOCK_STREAM, 6, "", ("93.184.216.34", 0))
+        ],
+    )
+    seen_headers: list[dict[str, str]] = []
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        seen_headers.append(dict(req.headers))
+        return httpx.Response(403, text="Forbidden")
+
+    real_client = crawler.httpx.Client
+    monkeypatch.setattr(
+        crawler.httpx,
+        "Client",
+        lambda **kw: real_client(transport=httpx.MockTransport(handler), **kw),
+    )
+
+    res = crawler.crawl_url(
+        "https://corp.example/sustainability_report.pdf",
+        dest_dir=tmp_path / "raw",
+        db_path=tmp_path / "test_403.db",
+    )
+    assert len(seen_headers) == 1
+    assert "Mozilla/5.0" in seen_headers[0]["user-agent"]
+    assert "accept" in seen_headers[0]
+    assert "accept-language" in seen_headers[0]
+    assert res[0]["status"] == "download_error"
+    assert "403" in res[0]["reason"]
+    assert "data/raw_docs/" in res[0]["reason"]
+    assert "ingestor.py" in res[0]["reason"]
+
+
+def test_save_profile_merges_multi_document_discoveries(tmp_path: Path) -> None:
+    db_path = tmp_path / "test_profile_merge.db"
+    db.init_db(db_path)
+
+    first_payload = {
+        "company_name": "Slovak Foods s.r.o.",
+        "source_url": "https://slovakfoods.example/esg",
+        "country": "SK",
+        "sector": "agrifood",
+        "employee_count": 450,
+        "consolidation_approach": "Operational control",
+        "boundary_exclusions": ["Kosice office excluded"],
+        "detected_frameworks": ["GRI"],
+        "applicable_regulations": ["EU_EMPCO_GREEN_CLAIMS"],
+        "crosswalk_summary": "Doc 1: GRI baseline.",
+    }
+    second_payload = {
+        "company_name": "Slovak Foods s.r.o.",
+        "source_url": "",
+        "country": "unknown",
+        "sector": "",
+        "employee_count": 0,
+        "consolidation_approach": "unknown",
+        "boundary_exclusions": "Scope 3 Cat 1 excluded",
+        "detected_frameworks": ["SBTi", "gri"],
+        "applicable_regulations": ["VS"],
+        "crosswalk_summary": "Doc 2: SBTi commitment.",
+    }
+
+    subprocess.run(
+        [sys.executable, str(SRC_DIR / "db.py"), "--db", str(db_path), "save-profile", "--json", json.dumps(first_payload)],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    subprocess.run(
+        [sys.executable, str(SRC_DIR / "db.py"), "--db", str(db_path), "save-profile", "--json", json.dumps(second_payload)],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    proc = subprocess.run(
+        [sys.executable, str(SRC_DIR / "db.py"), "--db", str(db_path), "show-profile", "--company-id", "slovak_foods_s_r_o"],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    rows = json.loads(proc.stdout)
+    assert len(rows) == 1
+    row = rows[0]
+    assert row["employee_count"] == 450
+    assert row["country"] == "SK"
+    assert row["consolidation_approach"] == "Operational control"
+    assert json.loads(row["detected_frameworks"]) == ["GRI", "SBTi"]
+    assert json.loads(row["applicable_regulations"]) == ["EU_EMPCO_GREEN_CLAIMS", "VS"]
+    assert json.loads(row["boundary_exclusions"]) == ["Kosice office excluded", "Scope 3 Cat 1 excluded"]
+    assert "Doc 1: GRI baseline." in row["crosswalk_summary"]
+    assert "Doc 2: SBTi commitment." in row["crosswalk_summary"]
+
+    # Explicit --overwrite resets merged lists and scalars
+    subprocess.run(
+        [
+            sys.executable,
+            str(SRC_DIR / "db.py"),
+            "--db",
+            str(db_path),
+            "save-profile",
+            "--overwrite",
+            "--json",
+            json.dumps({"company_name": "Slovak Foods s.r.o.", "detected_frameworks": ["VSME"]}),
+        ],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    reset_row = json.loads(
+        subprocess.run(
+            [sys.executable, str(SRC_DIR / "db.py"), "--db", str(db_path), "show-profile", "--company-id", "slovak_foods_s_r_o"],
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout
+    )[0]
+    assert json.loads(reset_row["detected_frameworks"]) == ["VSME"]
+    assert reset_row["employee_count"] is None
+
+
+def test_validate_rulebook_valid_and_invalid(tmp_path: Path) -> None:
+    valid_path = REPO_ROOT / "config" / "examples" / "vsme_value_chain_shield.yaml"
+    ok = subprocess.run(
+        [sys.executable, str(SRC_DIR / "db.py"), "validate-rulebook", "--yaml", str(valid_path)],
+        capture_output=True,
+        text=True,
+    )
+    assert ok.returncode == 0
+    assert "VALID: 4 requirements" in ok.stdout
+
+    missing_kw = tmp_path / "missing_keywords.yaml"
+    missing_kw.write_text(
+        yaml.safe_dump(
+            {
+                "framework": "TEST_FW",
+                "requirements": [
+                    {
+                        "req_id": "T-1",
+                        "standard": "S1",
+                        "topic": "Topic",
+                        "mandatory_datapoint": "Disclose X",
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    bad_kw = subprocess.run(
+        [sys.executable, str(SRC_DIR / "db.py"), "validate-rulebook", "--yaml", str(missing_kw)],
+        capture_output=True,
+        text=True,
+    )
+    assert bad_kw.returncode == 1
+    assert "keywords" in bad_kw.stderr
+
+    dup_id = tmp_path / "dup_id.yaml"
+    dup_id.write_text(
+        yaml.safe_dump(
+            {
+                "framework": "TEST_FW",
+                "requirements": [
+                    {
+                        "req_id": "T-1",
+                        "standard": "S1",
+                        "topic": "Topic A",
+                        "mandatory_datapoint": "Disclose A",
+                        "keywords": ["alpha"],
+                    },
+                    {
+                        "req_id": "T-1",
+                        "standard": "S1",
+                        "topic": "Topic B",
+                        "mandatory_datapoint": "Disclose B",
+                        "keywords": ["beta"],
+                    },
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    bad_dup = subprocess.run(
+        [sys.executable, str(SRC_DIR / "db.py"), "validate-rulebook", "--yaml", str(dup_id)],
+        capture_output=True,
+        text=True,
+    )
+    assert bad_dup.returncode == 1
+    assert "Duplicate req_id 'T-1'" in bad_dup.stderr

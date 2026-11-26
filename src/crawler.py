@@ -23,6 +23,15 @@ DEFAULT_PORTALS_PATH = Path("config/portals.yaml")
 SUPPORTED_EXTENSIONS = (".pdf", ".csv")
 MAX_BYTES = 50 * 1024 * 1024  # 50 MB streaming cap per downloaded file
 MAX_REDIRECTS = 5
+DEFAULT_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/131.0.0.0 Safari/537.36"
+    ),
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,application/pdf,text/csv;q=0.8,*/*;q=0.7",
+    "Accept-Language": "en-US,en;q=0.9",
+}
 DEFAULT_KEYWORDS = (
     "esg",
     "csrd",
@@ -289,6 +298,16 @@ def ingest_web_page(html: str, page_url: str, db_path: Path = DEFAULT_DB_PATH) -
     }
 
 
+def _format_http_error(url: str, exc: httpx.HTTPError) -> str:
+    """Return an actionable message, guiding manual download on HTTP 403 blocks."""
+    if isinstance(exc, httpx.HTTPStatusError) and exc.response.status_code == 403:
+        return (
+            f"HTTP 403 Forbidden from {url}. Save the PDF/CSV manually into "
+            "data/raw_docs/ and run `python src/ingestor.py --dir data/raw_docs`."
+        )
+    return str(exc)
+
+
 def crawl_url(
     target_url: str,
     dest_dir: Path = DEFAULT_RAW_DIR,
@@ -308,7 +327,7 @@ def crawl_url(
         client = httpx.Client(
             follow_redirects=False,
             timeout=timeout,
-            headers={"User-Agent": "VeriGreen-ops/1.0 (Local CSRD Readiness Crawler)"},
+            headers=DEFAULT_HEADERS,
         )
 
     results: list[dict] = []
@@ -346,12 +365,13 @@ def crawl_url(
                     err_file = safe_filename_from_url(file_url)
                 except ValueError:
                     err_file = file_url
+                reason = _format_http_error(file_url, exc) if isinstance(exc, httpx.HTTPError) else str(exc)
                 results.append(
                     {
                         "file": err_file,
                         "source_url": file_url,
                         "status": "download_error",
-                        "reason": str(exc),
+                        "reason": reason,
                     }
                 )
     finally:
@@ -379,7 +399,7 @@ def crawl_batch(
     with httpx.Client(
         follow_redirects=False,
         timeout=timeout,
-        headers={"User-Agent": "VeriGreen-ops/1.0 (Local CSRD Readiness Crawler)"},
+        headers=DEFAULT_HEADERS,
     ) as client:
         for portal in portals:
             name = portal.get("name", portal["url"])
@@ -397,13 +417,14 @@ def crawl_batch(
                 )
                 all_results.extend(portal_results)
             except httpx.HTTPError as exc:
-                print(f"[WARNING]  Portal failed ({url}): {exc}")
+                reason = _format_http_error(url, exc)
+                print(f"[WARNING]  Portal failed ({url}): {reason}")
                 all_results.append(
                     {
                         "file": name,
                         "source_url": url,
                         "status": "portal_error",
-                        "reason": str(exc),
+                        "reason": reason,
                     }
                 )
     return all_results
@@ -497,7 +518,7 @@ def main() -> None:
                 max_files=args.max_files,
             )
         except httpx.HTTPError as exc:
-            print(f"ERROR: Failed to fetch {args.url}: {exc}", file=sys.stderr)
+            print(f"ERROR: {_format_http_error(args.url, exc)}", file=sys.stderr)
             sys.exit(1)
     else:
         results = crawl_batch(
