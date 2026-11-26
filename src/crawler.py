@@ -1,6 +1,8 @@
 import argparse
 import hashlib
+import ipaddress
 import re
+import socket
 import sys
 from pathlib import Path
 from urllib.parse import unquote, urljoin, urlparse
@@ -10,15 +12,17 @@ import yaml
 from bs4 import BeautifulSoup
 
 try:
-    from db import DEFAULT_DB_PATH, init_db
+    from db import DEFAULT_DB_PATH, get_connection, init_db
     from ingestor import ingest_file
 except ImportError:
-    from src.db import DEFAULT_DB_PATH, init_db
+    from src.db import DEFAULT_DB_PATH, get_connection, init_db
     from src.ingestor import ingest_file
 
 DEFAULT_RAW_DIR = Path("data/raw_docs")
 DEFAULT_PORTALS_PATH = Path("config/portals.yaml")
 SUPPORTED_EXTENSIONS = (".pdf", ".csv")
+MAX_BYTES = 50 * 1024 * 1024  # 50 MB streaming cap per downloaded file
+MAX_REDIRECTS = 5
 DEFAULT_KEYWORDS = (
     "esg",
     "csrd",
@@ -89,51 +93,139 @@ def discover_links(
     return discovered
 
 
+def validate_url(url: str) -> str:
+    """Allow only public http/https URLs; block private, loopback, link-local, multicast, and reserved IPs."""
+    parsed = urlparse(url)
+    if parsed.scheme.lower() not in {"http", "https"} or not parsed.hostname:
+        raise ValueError(f"Blocked or invalid URL scheme/host: {url!r}")
+
+    try:
+        addr_info = socket.getaddrinfo(parsed.hostname, None)
+    except socket.gaierror as exc:
+        raise ValueError(f"Could not resolve host {parsed.hostname!r}: {exc}") from exc
+
+    for _, _, _, _, sockaddr in addr_info:
+        ip_str = sockaddr[0].split("%", 1)[0]
+        ip = ipaddress.ip_address(ip_str)
+        if getattr(ip, "ipv4_mapped", None):
+            ip = ip.ipv4_mapped
+        if (
+            ip.is_private
+            or ip.is_loopback
+            or ip.is_link_local
+            or ip.is_multicast
+            or ip.is_reserved
+            or ip.is_unspecified
+        ):
+            raise ValueError(f"Blocked non-public IP for {parsed.hostname!r}: {ip}")
+    return url
+
+
+def sanitize_filename(name: str) -> str:
+    """Validate and return a single safe filename component without path traversal."""
+    if not name or "/" in name or "\\" in name:
+        raise ValueError(f"Unsafe filename: {name!r}")
+    clean = Path(name).name
+    if not clean or clean in {".", ".."} or ".." in Path(clean).parts:
+        raise ValueError(f"Unsafe filename: {name!r}")
+    return clean
+
+
+def _assert_within_dir(dest_dir: Path, target: Path) -> Path:
+    if not target.resolve().is_relative_to(dest_dir.resolve()):
+        raise ValueError(f"Path traversal blocked: {target} escapes {dest_dir}")
+    return target
+
+
 def safe_filename_from_url(file_url: str, fallback_stem: str = "report") -> str:
     """Derive a filesystem-safe .pdf or .csv filename from a URL."""
     parsed = urlparse(file_url)
-    raw_name = unquote(Path(parsed.path).name)
+    raw_segment = unquote(Path(parsed.path).name)
+    raw_name = sanitize_filename(raw_segment) if raw_segment else ""
     suffix = Path(raw_name).suffix.lower()
     if suffix not in SUPPORTED_EXTENSIONS:
         suffix = ".pdf"
     stem = Path(raw_name).stem or fallback_stem
     safe_stem = re.sub(r'[<>:"/\\|?*\x00-\x1f]+', "_", stem).strip(" ._") or fallback_stem
-    return f"{safe_stem[:120]}{suffix}"
+    return sanitize_filename(f"{safe_stem[:120]}{suffix}")
 
 
-def _resolve_target_path(dest_dir: Path, filename: str, content: bytes) -> Path:
-    """Avoid clobbering an existing file with different content while preserving identical ones."""
-    candidate = dest_dir / filename
+def _resolve_target_path(dest_dir: Path, filename: str, incoming_hash: str) -> tuple[Path, bool]:
+    """Return (target_path, already_identical) while guarding against path traversal."""
+    clean_name = sanitize_filename(filename)
+    candidate = _assert_within_dir(dest_dir, dest_dir / clean_name)
     if not candidate.exists():
-        return candidate
+        return candidate, False
 
     existing_hash = hashlib.sha256(candidate.read_bytes()).hexdigest()
-    incoming_hash = hashlib.sha256(content).hexdigest()
     if existing_hash == incoming_hash:
-        return candidate
+        return candidate, True
 
-    stem = Path(filename).stem
-    suffix = Path(filename).suffix
-    return dest_dir / f"{stem}_{incoming_hash[:8]}{suffix}"
+    stem = Path(clean_name).stem
+    suffix = Path(clean_name).suffix
+    alt = _assert_within_dir(dest_dir, dest_dir / f"{stem}_{incoming_hash[:8]}{suffix}")
+    return alt, False
+
+
+def _get_validated(client: httpx.Client, url: str) -> httpx.Response:
+    """Perform GET with SSRF validation on the initial URL and every redirect hop."""
+    current = validate_url(url)
+    for _ in range(MAX_REDIRECTS + 1):
+        resp = client.get(current, follow_redirects=False)
+        if resp.is_redirect and "location" in resp.headers:
+            current = validate_url(urljoin(str(resp.url), resp.headers["location"]))
+            continue
+        resp.raise_for_status()
+        return resp
+    raise ValueError(f"Exceeded {MAX_REDIRECTS} redirects for {url}")
 
 
 def download_file(client: httpx.Client, file_url: str, dest_dir: Path) -> Path:
-    """Download a .pdf or .csv file into dest_dir and return its local Path."""
-    response = client.get(file_url)
-    response.raise_for_status()
-
-    content_type = response.headers.get("content-type", "").lower()
-    if "text/html" in content_type:
-        raise ValueError(f"Expected PDF/CSV bytes but received HTML ({content_type})")
-    if not response.content:
-        raise ValueError("Downloaded empty response body")
-
+    """Stream a .pdf or .csv file into dest_dir with SSRF, traversal, and size guards."""
+    current = validate_url(file_url)
     dest_dir.mkdir(parents=True, exist_ok=True)
-    filename = safe_filename_from_url(file_url)
-    dest_path = _resolve_target_path(dest_dir, filename, response.content)
-    if not dest_path.exists():
-        dest_path.write_bytes(response.content)
-    return dest_path
+    filename = safe_filename_from_url(current)
+    tmp_path = _assert_within_dir(dest_dir, dest_dir / f".{filename}.part")
+
+    total_bytes = 0
+    hasher = hashlib.sha256()
+    try:
+        for _ in range(MAX_REDIRECTS + 1):
+            with client.stream("GET", current, follow_redirects=False) as response:
+                if response.is_redirect and "location" in response.headers:
+                    current = validate_url(urljoin(str(response.url), response.headers["location"]))
+                    continue
+                response.raise_for_status()
+
+                content_type = response.headers.get("content-type", "").lower()
+                if "text/html" in content_type:
+                    raise ValueError(f"Expected PDF/CSV bytes but received HTML ({content_type})")
+
+                with open(tmp_path, "wb") as fh:
+                    for chunk in response.iter_bytes():
+                        if not chunk:
+                            continue
+                        total_bytes += len(chunk)
+                        if total_bytes > MAX_BYTES:
+                            raise ValueError(f"Download exceeded {MAX_BYTES} byte limit")
+                        fh.write(chunk)
+                        hasher.update(chunk)
+                break
+        else:
+            raise ValueError(f"Exceeded {MAX_REDIRECTS} redirects for {file_url}")
+
+        if total_bytes == 0:
+            raise ValueError("Downloaded empty response body")
+
+        dest_path, already_identical = _resolve_target_path(dest_dir, filename, hasher.hexdigest())
+        if already_identical:
+            tmp_path.unlink(missing_ok=True)
+            return dest_path
+        tmp_path.replace(dest_path)
+        return dest_path
+    except Exception:
+        tmp_path.unlink(missing_ok=True)
+        raise
 
 
 def load_portals_yaml(portals_path: Path = DEFAULT_PORTALS_PATH) -> list[dict]:
@@ -148,6 +240,55 @@ def load_portals_yaml(portals_path: Path = DEFAULT_PORTALS_PATH) -> list[dict]:
     return [p for p in portals if p.get("enabled", True) and p.get("url")]
 
 
+def ingest_web_page(html: str, page_url: str, db_path: Path = DEFAULT_DB_PATH) -> dict | None:
+    """Extract cleaned visible landing-page text and store in SQLite with doc_type='web'."""
+    soup = BeautifulSoup(html, "html.parser")
+    for tag in soup(["script", "style", "noscript", "nav", "footer", "header"]):
+        tag.decompose()
+    lines = [line.strip() for line in soup.get_text("\n").splitlines() if line.strip()]
+    text = "\n".join(lines)
+    if not text:
+        return None
+
+    file_hash = hashlib.sha256(text.encode("utf-8")).hexdigest()
+    doc_id = f"web_{file_hash[:8]}"
+    with get_connection(db_path) as conn:
+        existing = conn.execute(
+            "SELECT doc_id FROM documents WHERE file_hash = ?",
+            (file_hash,),
+        ).fetchone()
+        if existing:
+            return {
+                "file": page_url,
+                "source_url": page_url,
+                "status": "skipped_duplicate",
+                "doc_id": existing["doc_id"],
+                "doc_type": "web",
+            }
+        conn.execute(
+            """
+            INSERT INTO documents (doc_id, file_hash, filename, doc_type, page_count)
+            VALUES (?, ?, ?, 'web', 1);
+            """,
+            (doc_id, file_hash, page_url),
+        )
+        conn.execute(
+            """
+            INSERT INTO document_pages (doc_id, page_number, content_text)
+            VALUES (?, 1, ?);
+            """,
+            (doc_id, text),
+        )
+    return {
+        "file": page_url,
+        "source_url": page_url,
+        "status": "ingested",
+        "doc_id": doc_id,
+        "doc_type": "web",
+        "pages": 1,
+    }
+
+
 def crawl_url(
     target_url: str,
     dest_dir: Path = DEFAULT_RAW_DIR,
@@ -158,13 +299,14 @@ def crawl_url(
     client: httpx.Client | None = None,
 ) -> list[dict]:
     """Crawl a webpage (or direct PDF/CSV URL), download files, and ingest via ingest_file()."""
+    validate_url(target_url)
     dest_dir.mkdir(parents=True, exist_ok=True)
     init_db(db_path)
 
     owns_client = client is None
     if client is None:
         client = httpx.Client(
-            follow_redirects=True,
+            follow_redirects=False,
             timeout=timeout,
             headers={"User-Agent": "VeriGreen-ops/1.0 (Local CSRD Readiness Crawler)"},
         )
@@ -175,12 +317,14 @@ def crawl_url(
         if parsed_target.path.lower().endswith(SUPPORTED_EXTENSIONS):
             file_urls = [target_url]
         else:
-            resp = client.get(target_url)
-            resp.raise_for_status()
+            resp = _get_validated(client, target_url)
             content_type = resp.headers.get("content-type", "").lower()
             if "application/pdf" in content_type or "text/csv" in content_type:
                 file_urls = [str(resp.url)]
             else:
+                web_res = ingest_web_page(resp.text, str(resp.url), db_path=db_path)
+                if web_res is not None:
+                    results.append(web_res)
                 file_urls = discover_links(
                     resp.text,
                     base_url=str(resp.url),
@@ -198,9 +342,13 @@ def crawl_url(
                 ingest_res["source_url"] = file_url
                 results.append(ingest_res)
             except (httpx.HTTPError, ValueError, OSError) as exc:
+                try:
+                    err_file = safe_filename_from_url(file_url)
+                except ValueError:
+                    err_file = file_url
                 results.append(
                     {
-                        "file": safe_filename_from_url(file_url),
+                        "file": err_file,
                         "source_url": file_url,
                         "status": "download_error",
                         "reason": str(exc),
@@ -229,7 +377,7 @@ def crawl_batch(
 
     all_results: list[dict] = []
     with httpx.Client(
-        follow_redirects=True,
+        follow_redirects=False,
         timeout=timeout,
         headers={"User-Agent": "VeriGreen-ops/1.0 (Local CSRD Readiness Crawler)"},
     ) as client:

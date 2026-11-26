@@ -1,0 +1,93 @@
+# VeriGreen-ops Regulatory Applicability & Framework Cross-Walk Matrix
+# Deterministic mapping from (country_region, min_employees, sector) to
+# mandatory rulebooks in config/ and config/examples/, plus voluntary crosswalks.
+
+version: "2026.1"
+
+rules:
+  - rule_id: "EU-NL-CSRD-LARGE"
+    country_region: ["NL", "EU"]
+    min_employees: 1001
+    max_employees: null
+    sector: ["all"]
+    regulation: "CSRD / EU Omnibus I Revised ESRS 2026 (Delegated Regulation (EU) 2026/1563)"
+    framework: "ESRS_2026"
+    rulebooks:
+      - "config/esrs_standards.yaml"
+      - "config/examples/csddd_value_chain_due_diligence.yaml"
+    notes: "Large undertakings (>1,000 employees) require full ESRS 2026 double materiality and CSDDD value-chain due diligence."
+
+  - rule_id: "EU-SME-VSME-CAP"
+    country_region: ["NL", "EU"]
+    min_employees: 0
+    max_employees: 1000
+    sector: ["all"]
+    regulation: "EU Omnibus I Voluntary SME Standard (VSME, Delegated Regulation (EU) 2026/1560)"
+    framework: "VS"
+    rulebooks:
+      - "config/esrs_standards.yaml"
+    notes: "Undertakings with <=1,000 employees fall under the VSME value-chain protection cap unless opted into ESRS_2026."
+
+  - rule_id: "EU-AGRIFOOD-EUDR"
+    country_region: ["NL", "EU"]
+    min_employees: 0
+    max_employees: null
+    sector: ["agrifood", "agriculture", "food", "beverage", "retail", "palm", "cocoa", "coffee", "soy", "timber", "cattle", "rubber"]
+    regulation: "EU Deforestation Regulation (EUDR) & Scope 3 Agri-Food Emissions"
+    framework: "GHG_AGRIFOOD"
+    rulebooks:
+      - "config/examples/ghg_scope3_agrifood.yaml"
+      - "config/examples/rspo_ispo_palm_sustainability.yaml"
+    notes: "Agri-food and forest-risk commodity operators require geolocation traceability, FLAG/Scope 3 accounting, and deforestation-free proof."
+
+  - rule_id: "NL-ACM-GREEN-CLAIMS"
+    country_region: ["NL", "EU"]
+    min_employees: 0
+    max_employees: null
+    sector: ["all"]
+    regulation: "NL ACM Leidraad Duurzaamheidsclaims & EU Empowering Consumers Directive"
+    framework: "ESRS_2026"
+    rulebooks:
+      - "config/esrs_standards.yaml"
+    notes: "Enforced on all B2C/B2B sustainability claims via /greenwash; prohibits vague 'carbon neutral' or offset-only assertions without gross emissions and LCA boundaries."
+
+  - rule_id: "EU-FINANCE-SFDR"
+    country_region: ["NL", "EU"]
+    min_employees: 0
+    max_employees: null
+    sector: ["finance", "banking", "insurance", "investment", "asset_management"]
+    regulation: "EU Sustainable Finance Disclosure Regulation (SFDR PAI)"
+    framework: "EU_SFDR_PAI"
+    rulebooks:
+      - "config/examples/sfdr_impact_finance_pai.yaml"
+    notes: "Financial market participants must disclose Principal Adverse Impact (PAI) indicators across investee portfolios."
+
+crosswalks:
+  GRI:
+    covers:
+      - "Impact materiality narrative structure and stakeholder engagement"
+      - "Baseline workforce, diversity, and Scope 1/2/3 GHG reporting structure"
+    blind_spots:
+      - "Lacks ESRS 2026 financial materiality (double materiality) and EU Omnibus I VSME tagging"
+      - "Does not satisfy EUDR plot-level geolocation or NL ACM claim substantiation rules"
+  ISO 14001:
+    covers:
+      - "Environmental management system (EMS) governance, internal audit, and operational controls"
+    blind_spots:
+      - "Certifies management process rather than quantitative ESRS E1-E5 KPI disclosure or Scope 3 inventory"
+      - "Provides no product-level LCA proof for NL ACM / EU Green Claims compliance"
+  TCFD:
+    covers:
+      - "Climate governance, physical/transition risk scenarios, and Scope 1/2/3 climate metrics (ESRS E1 overlap)"
+    blind_spots:
+      - "Covers climate only; omits ESRS E2-E5 (pollution, water, biodiversity, circularity) and social/governance standards (S1-S4, G1)"
+  RSPO:
+    covers:
+      - "Certified palm oil chain-of-custody and zero-deforestation mill criteria"
+    blind_spots:
+      - "Certification alone does not fulfill EUDR polygon geolocation Due Diligence Statements or full ESRS E4/Scope 3 FLAG disclosures"
+  SBTi:
+    covers:
+      - "1.5C-aligned GHG reduction targets and base-year validation (ESRS E1-4 overlap)"
+    blind_spots:
+      - "Validates targets only; does not cover transition plan capex (ESRS E1-1), actual facility reconciliations, or non-climate ESRS topics"

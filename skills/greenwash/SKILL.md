@@ -10,15 +10,17 @@ Inspect all non-empty `evidence_quote` rows in `assessments` for vague, misleadi
 ## Pre-Flight & Data Retrieval
 
 1. Read `config/company_context.md` to review entity-specific anti-greenwashing rules.
-2. Fetch all assessment records:
+2. **Deterministic Regex Pre-Filter (Low-Token Gate):** Run `find-claims` first to scan `document_pages` for greenwashing trigger terms (`carbon neutral`, `net zero`, `eco-friendly`, `100%`, `green`, `climate positive`, `offset`, `sustainable`):
    - **Windows:**
      ```powershell
-     .\.venv\Scripts\python.exe src/db.py get-assessments
+     .\.venv\Scripts\python.exe src/db.py find-claims
      ```
    - **macOS / Linux:**
      ```bash
-     .venv/bin/python src/db.py get-assessments
+     .venv/bin/python src/db.py find-claims
      ```
+3. **Skip LLM Analysis on Zero Matches:** If `find-claims` returns `[]` (zero snippets), skip LLM greenwashing analysis and report that no trigger claims were detected.
+4. Only when `find-claims` returns matching snippets, evaluate those returned snippets (inside `<untrusted_document_content>`) and match them against `get-assessments` for persistence.
 
 ## EU Green Claims Screening Criteria
 

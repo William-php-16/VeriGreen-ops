@@ -23,3 +23,8 @@ output/*.pdf
 # Private Data
 PRD.md
 Roadmap.md
+
+# Local dev-only AI tooling
+graphify-out/
+.agents/rules/graphify.md
+.agents/workflows/graphify.md

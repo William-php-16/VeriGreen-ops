@@ -40,19 +40,25 @@ def _fetch_dashboard_data(db_path: Path) -> dict:
     """Query pipeline counts, readiness rows, approval stats, and greenwash flags."""
     conn = _open_readonly_fallback(db_path)
     try:
-        counts = {}
-        for table in (
-            "documents",
-            "document_pages",
-            "esrs_requirements",
-            "assessments",
-            "disclosure_drafts",
-        ):
-            counts[table] = conn.execute(f"SELECT COUNT(*) AS cnt FROM {table};").fetchone()["cnt"]
-
-        approved_count = conn.execute(
-            "SELECT COUNT(*) AS cnt FROM disclosure_drafts WHERE human_approved = 1;"
-        ).fetchone()["cnt"]
+        counts_row = conn.execute(
+            """
+            SELECT
+                (SELECT COUNT(*) FROM documents) AS documents,
+                (SELECT COUNT(*) FROM document_pages) AS document_pages,
+                (SELECT COUNT(*) FROM esrs_requirements) AS esrs_requirements,
+                (SELECT COUNT(*) FROM assessments) AS assessments,
+                (SELECT COUNT(*) FROM disclosure_drafts) AS disclosure_drafts,
+                (SELECT COUNT(*) FROM disclosure_drafts WHERE human_approved = 1) AS approved_drafts;
+            """
+        ).fetchone()
+        counts = {
+            "documents": counts_row["documents"],
+            "document_pages": counts_row["document_pages"],
+            "esrs_requirements": counts_row["esrs_requirements"],
+            "assessments": counts_row["assessments"],
+            "disclosure_drafts": counts_row["disclosure_drafts"],
+        }
+        approved_count = counts_row["approved_drafts"]
 
         readiness_rows = conn.execute(
             """

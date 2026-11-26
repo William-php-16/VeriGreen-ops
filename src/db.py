@@ -1,6 +1,7 @@
 import argparse
 import hashlib
 import json
+import re
 import sqlite3
 from pathlib import Path
 import yaml
@@ -30,7 +31,7 @@ def init_db(db_path: Path = DEFAULT_DB_PATH, reset: bool = False) -> None:
                 doc_id TEXT PRIMARY KEY,
                 file_hash TEXT UNIQUE NOT NULL,
                 filename TEXT NOT NULL,
-                doc_type TEXT NOT NULL CHECK(doc_type IN ('pdf', 'csv')),
+                doc_type TEXT NOT NULL CHECK(doc_type IN ('pdf', 'csv', 'web')),
                 page_count INTEGER NOT NULL DEFAULT 1,
                 ingested_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
@@ -82,9 +83,48 @@ def init_db(db_path: Path = DEFAULT_DB_PATH, reset: bool = False) -> None:
                 FOREIGN KEY (req_id) REFERENCES esrs_requirements(req_id) ON DELETE CASCADE
             );
 
+            CREATE TABLE IF NOT EXISTS company_profiles (
+                company_id TEXT PRIMARY KEY,
+                company_name TEXT NOT NULL,
+                source_url TEXT NOT NULL DEFAULT '',
+                country TEXT NOT NULL DEFAULT '',
+                sector TEXT NOT NULL DEFAULT '',
+                employee_count INTEGER,
+                detected_frameworks TEXT NOT NULL DEFAULT '[]',
+                applicable_regulations TEXT NOT NULL DEFAULT '[]',
+                crosswalk_summary TEXT NOT NULL DEFAULT '',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+
             CREATE INDEX IF NOT EXISTS idx_pages_doc ON document_pages(doc_id);
             CREATE INDEX IF NOT EXISTS idx_assess_req ON assessments(req_id);
             CREATE INDEX IF NOT EXISTS idx_assess_doc ON assessments(doc_id);
+
+            CREATE VIRTUAL TABLE IF NOT EXISTS pages_fts USING fts5(
+                doc_id UNINDEXED,
+                page_number UNINDEXED,
+                content_text
+            );
+
+            CREATE TRIGGER IF NOT EXISTS trg_document_pages_ai AFTER INSERT ON document_pages BEGIN
+                INSERT INTO pages_fts(rowid, doc_id, page_number, content_text)
+                VALUES (new.page_id, new.doc_id, new.page_number, new.content_text);
+            END;
+
+            CREATE TRIGGER IF NOT EXISTS trg_document_pages_ad AFTER DELETE ON document_pages BEGIN
+                DELETE FROM pages_fts WHERE rowid = old.page_id;
+            END;
+
+            CREATE TRIGGER IF NOT EXISTS trg_document_pages_au AFTER UPDATE ON document_pages BEGIN
+                DELETE FROM pages_fts WHERE rowid = old.page_id;
+                INSERT INTO pages_fts(rowid, doc_id, page_number, content_text)
+                VALUES (new.page_id, new.doc_id, new.page_number, new.content_text);
+            END;
+
+            INSERT INTO pages_fts(rowid, doc_id, page_number, content_text)
+            SELECT page_id, doc_id, page_number, content_text
+            FROM document_pages
+            WHERE page_id NOT IN (SELECT rowid FROM pages_fts);
             """
         )
 
@@ -140,37 +180,34 @@ def compute_file_hash(file_path: Path) -> str:
 
 def cmd_status(db_path: Path) -> None:
     with get_connection(db_path) as conn:
-        tables = [
-            "documents",
-            "document_pages",
-            "esrs_requirements",
-            "assessments",
-            "disclosure_drafts",
-        ]
-        summary = {}
-        for t in tables:
-            row = conn.execute(f"SELECT COUNT(*) AS cnt FROM {t}").fetchone()
-            summary[t] = row["cnt"]
-    print(json.dumps({"db_path": str(db_path), "counts": summary}, indent=2))
+        row = conn.execute(
+            """
+            SELECT
+                (SELECT COUNT(*) FROM documents) AS documents,
+                (SELECT COUNT(*) FROM document_pages) AS document_pages,
+                (SELECT COUNT(*) FROM esrs_requirements) AS esrs_requirements,
+                (SELECT COUNT(*) FROM assessments) AS assessments,
+                (SELECT COUNT(*) FROM disclosure_drafts) AS disclosure_drafts;
+            """
+        ).fetchone()
+    print(json.dumps({"db_path": str(db_path), "counts": dict(row)}, indent=2))
 
 
 def cmd_list_unassessed(db_path: Path, framework: str | None = None) -> None:
-    query = """
-        SELECT r.req_id, r.framework, r.standard, r.topic, r.requirement_text, r.is_quantitative,
-               d.doc_id, d.filename, d.doc_type
-        FROM esrs_requirements r
-        CROSS JOIN documents d
-        LEFT JOIN assessments a ON a.req_id = r.req_id AND a.doc_id = d.doc_id
-        WHERE a.assess_id IS NULL
-    """
-    params: list[str] = []
-    if framework:
-        query += " AND r.framework = ?"
-        params.append(framework)
-    query += " ORDER BY d.doc_id, r.req_id;"
-
     with get_connection(db_path) as conn:
-        rows = conn.execute(query, params).fetchall()
+        rows = conn.execute(
+            """
+            SELECT r.req_id, r.framework, r.standard, r.topic, r.requirement_text, r.is_quantitative,
+                   d.doc_id, d.filename, d.doc_type
+            FROM esrs_requirements r
+            CROSS JOIN documents d
+            LEFT JOIN assessments a ON a.req_id = r.req_id AND a.doc_id = d.doc_id
+            WHERE a.assess_id IS NULL
+              AND (? IS NULL OR r.framework = ?)
+            ORDER BY d.doc_id, r.req_id;
+            """,
+            (framework, framework),
+        ).fetchall()
     print(json.dumps([dict(r) for r in rows], indent=2))
 
 
@@ -185,7 +222,130 @@ def cmd_get_pages(db_path: Path, doc_id: str) -> None:
             """,
             (doc_id,),
         ).fetchall()
-    print(json.dumps([dict(r) for r in rows], indent=2))
+    pages = [
+        {
+            "page_number": r["page_number"],
+            "content_text": (
+                f"<untrusted_document_content>\n{r['content_text']}\n</untrusted_document_content>"
+            ),
+        }
+        for r in rows
+    ]
+    print(json.dumps(pages, indent=2))
+
+
+_FTS_STOPWORDS = frozenset({
+    "the", "and", "for", "with", "from", "that", "this", "are", "into",
+    "their", "across", "including", "covering", "disclose", "ensure",
+    "total", "year", "under", "any", "not", "all", "per", "near", "how",
+})
+
+GREENWASH_CLAIM_RE = re.compile(
+    r"(?:"
+    r"\bcarbon[\s-]+neutral\b"
+    r"|\bnet[\s-]+zero\b"
+    r"|\beco[\s-]+friendly\b"
+    r"|\b100%"
+    r"|\bgreen\b"
+    r"|\bclimate[\s-]+positive\b"
+    r"|\boffsets?\b"
+    r"|\bsustainable\b"
+    r")",
+    re.IGNORECASE,
+)
+
+
+def _build_fts_query(topic: str, requirement_text: str) -> str:
+    tokens = re.findall(r"[A-Za-z0-9]{3,}", f"{topic} {requirement_text}".lower())
+    seen: list[str] = []
+    for tok in tokens:
+        if tok not in _FTS_STOPWORDS and tok not in seen:
+            seen.append(tok)
+            if len(seen) >= 16:
+                break
+    if not seen:
+        seen = list(dict.fromkeys(re.findall(r"[A-Za-z0-9]+", f"{topic} {requirement_text}".lower())))[:16]
+    return " OR ".join(f'"{tok}"' for tok in seen)
+
+
+def cmd_search_pages(db_path: Path, req_id: str, limit: int = 5) -> None:
+    with get_connection(db_path) as conn:
+        req = conn.execute(
+            "SELECT req_id, topic, requirement_text FROM esrs_requirements WHERE req_id = ?;",
+            (req_id,),
+        ).fetchone()
+        if req is None:
+            raise ValueError(f"Unknown req_id={req_id}")
+        fts_query = _build_fts_query(req["topic"], req["requirement_text"])
+        if not fts_query:
+            print("[]")
+            return
+        rows = conn.execute(
+            """
+            SELECT p.doc_id, d.filename, d.doc_type, p.page_number, p.content_text,
+                   bm25(pages_fts) AS rank
+            FROM pages_fts p
+            JOIN documents d ON d.doc_id = p.doc_id
+            WHERE pages_fts MATCH ?
+            ORDER BY rank ASC, p.doc_id ASC, p.page_number ASC
+            LIMIT ?;
+            """,
+            (fts_query, max(1, limit)),
+        ).fetchall()
+    results = [
+        {
+            "doc_id": r["doc_id"],
+            "filename": r["filename"],
+            "doc_type": r["doc_type"],
+            "page_number": r["page_number"],
+            "rank": round(float(r["rank"]), 4),
+            "content_text": (
+                f"<untrusted_document_content>\n{r['content_text']}\n</untrusted_document_content>"
+            ),
+        }
+        for r in rows
+    ]
+    print(json.dumps(results, indent=2))
+
+
+def cmd_find_claims(db_path: Path) -> None:
+    with get_connection(db_path) as conn:
+        rows = conn.execute(
+            """
+            SELECT p.doc_id, d.filename, p.page_number, p.content_text
+            FROM document_pages p
+            JOIN documents d ON d.doc_id = p.doc_id
+            ORDER BY p.doc_id ASC, p.page_number ASC;
+            """
+        ).fetchall()
+
+    findings: list[dict] = []
+    for r in rows:
+        text = r["content_text"]
+        windows: list[list] = []
+        for m in GREENWASH_CLAIM_RE.finditer(text):
+            start = max(0, m.start() - 120)
+            end = min(len(text), m.end() + 120)
+            term = m.group(0)
+            if windows and start <= windows[-1][1]:
+                windows[-1][1] = max(windows[-1][1], end)
+                if term.lower() not in {t.lower() for t in windows[-1][2]}:
+                    windows[-1][2].append(term)
+            else:
+                windows.append([start, end, [term]])
+
+        for start, end, terms in windows:
+            snippet = text[start:end].strip()
+            findings.append(
+                {
+                    "doc_id": r["doc_id"],
+                    "filename": r["filename"],
+                    "page_number": r["page_number"],
+                    "matched_terms": terms,
+                    "snippet": f"<untrusted_document_content>\n{snippet}\n</untrusted_document_content>",
+                }
+            )
+    print(json.dumps(findings, indent=2))
 
 
 def cmd_save_assessment(db_path: Path, raw_json: str) -> None:
@@ -261,6 +421,69 @@ def cmd_approve(db_path: Path, req_id: str, notes: str) -> None:
     print(f"Approved disclosure draft for {req_id}.")
 
 
+def _json_field(val: object, default: str = "[]") -> str:
+    if val is None:
+        return default
+    return json.dumps(val) if isinstance(val, (list, dict)) else str(val)
+
+
+def cmd_save_profile(db_path: Path, raw_json: str) -> None:
+    data = json.loads(raw_json)
+    company_name = data["company_name"].strip()
+    if not company_name:
+        raise ValueError("company_name must not be empty")
+    company_id = data.get("company_id") or re.sub(r"[^a-z0-9]+", "_", company_name.lower()).strip("_") or "company"
+    emp = data.get("employee_count")
+    employee_count = int(emp) if emp is not None else None
+
+    with get_connection(db_path) as conn:
+        conn.execute(
+            """
+            INSERT INTO company_profiles (
+                company_id, company_name, source_url, country, sector,
+                employee_count, detected_frameworks, applicable_regulations, crosswalk_summary
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(company_id) DO UPDATE SET
+                company_name = excluded.company_name,
+                source_url = excluded.source_url,
+                country = excluded.country,
+                sector = excluded.sector,
+                employee_count = excluded.employee_count,
+                detected_frameworks = excluded.detected_frameworks,
+                applicable_regulations = excluded.applicable_regulations,
+                crosswalk_summary = excluded.crosswalk_summary,
+                created_at = CURRENT_TIMESTAMP;
+            """,
+            (
+                company_id,
+                company_name,
+                data.get("source_url", ""),
+                data.get("country", ""),
+                data.get("sector", ""),
+                employee_count,
+                _json_field(data.get("detected_frameworks")),
+                _json_field(data.get("applicable_regulations")),
+                data.get("crosswalk_summary", ""),
+            ),
+        )
+    print(f"Saved company profile for {company_id}.")
+
+
+def cmd_show_profile(db_path: Path, company_id: str | None = None) -> None:
+    with get_connection(db_path) as conn:
+        if company_id:
+            rows = conn.execute(
+                "SELECT * FROM company_profiles WHERE company_id = ?;",
+                (company_id,),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT * FROM company_profiles ORDER BY created_at DESC, company_id ASC;"
+            ).fetchall()
+    print(json.dumps([dict(r) for r in rows], indent=2))
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="VeriGreen-ops SQLite Audit State Manager")
     parser.add_argument("--db", type=Path, default=DEFAULT_DB_PATH, help="Path to SQLite DB")
@@ -280,6 +503,12 @@ def main() -> None:
     p_pages = sub.add_parser("get-pages", help="Get extracted pages for a document")
     p_pages.add_argument("--doc-id", required=True)
 
+    p_search = sub.add_parser("search-pages", help="Search pages_fts for top pages matching a requirement")
+    p_search.add_argument("--req-id", required=True)
+    p_search.add_argument("--limit", type=int, default=5)
+
+    sub.add_parser("find-claims", help="Scan document_pages with regex for greenwashing trigger terms")
+
     p_save = sub.add_parser("save-assessment", help="Upsert an assessment JSON record")
     p_save.add_argument("--json", required=True)
 
@@ -290,6 +519,12 @@ def main() -> None:
     p_app = sub.add_parser("approve", help="Mark a disclosure draft as human-approved")
     p_app.add_argument("--req-id", required=True)
     p_app.add_argument("--notes", default="Verified against source evidence")
+
+    p_save_prof = sub.add_parser("save-profile", help="Upsert a discovered company profile JSON record")
+    p_save_prof.add_argument("--json", required=True)
+
+    p_show_prof = sub.add_parser("show-profile", help="Show saved company profile(s)")
+    p_show_prof.add_argument("--company-id", default=None)
 
     args = parser.parse_args()
 
@@ -307,12 +542,20 @@ def main() -> None:
         cmd_list_unassessed(args.db, framework=args.framework)
     elif args.command == "get-pages":
         cmd_get_pages(args.db, args.doc_id)
+    elif args.command == "search-pages":
+        cmd_search_pages(args.db, args.req_id, limit=args.limit)
+    elif args.command == "find-claims":
+        cmd_find_claims(args.db)
     elif args.command == "save-assessment":
         cmd_save_assessment(args.db, args.json)
     elif args.command == "save-draft":
         cmd_save_draft(args.db, args.req_id, args.file)
     elif args.command == "approve":
         cmd_approve(args.db, args.req_id, args.notes)
+    elif args.command == "save-profile":
+        cmd_save_profile(args.db, args.json)
+    elif args.command == "show-profile":
+        cmd_show_profile(args.db, company_id=args.company_id)
 
 
 if __name__ == "__main__":

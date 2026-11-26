@@ -37,6 +37,12 @@ For each requirement (`req_id`) in scope:
 4. **Formal Assurance Tone:**
    - Write concise, objective, third-person regulatory prose suitable for limited-assurance review under Revised ESRS 2026 / VS.
 
+## Humanization Pass (Required Before Saving)
+
+Before saving any draft to `disclosure_drafts`, apply [skills/humanize/SKILL.md](../humanize/SKILL.md) to the prose:
+- Remove em dashes, banned AI buzzwords, filler phrases, superficial `-ing` tack-ons, rule-of-three padding, and negative parallelisms.
+- **Strictly preserve** all numbers, units, percentages, verbatim quotes, `[Source: <filename>, p.<page_number>]` citations, and `[DATA GAP: ...]` markers verbatim.
+
 ## Persistence (HITL Lock)
 
 Save each drafted section via `src/db.py save-draft` (which always initializes/resets `human_approved = 0`):
